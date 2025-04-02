@@ -4,7 +4,7 @@ Application configuration.
 
 import pytz
 from configparser import ConfigParser
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 class Config:
@@ -50,10 +50,7 @@ class Config:
                 "%Y-%m-%d",
             ).date()
         else:
-            self.latest = datetime.strptime(
-                (self.startupdate - timedelta(days=1)).strftime("%Y-%m-%d"),
-                "%Y-%m-%d",
-            ).date()
+            self.latest = self.startupdate
 
         sdeversion = self.config.get("STATUS", "sdeversion", fallback="1970-01-01")
         if sdeversion:

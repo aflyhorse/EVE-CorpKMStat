@@ -2,7 +2,7 @@
 Command line interface for the application.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import os
 import tarfile
 from pathlib import Path
@@ -39,7 +39,7 @@ def initdb(drop):
     click.echo("Initialized database.")
 
 
-def kmurl(date: datetime) -> str:
+def kmurl(date: date) -> str:
     """
     Generate the URL for the killmails based on the given date.
     """
@@ -198,6 +198,54 @@ def parse(date):
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error: {e}")
+
+
+@app.cli.command()
+def parseall():
+    """
+    Parse killmails from config.latest date (inclusive) to yesterday (inclusive).
+    Stops immediately if killmail data is unavailable or if parsing fails.
+    Updates config.latest after each successful parse.
+    """
+    try:
+        # Get the starting date from config, backtrace 3 days for completeness
+        start_date = config.latest - timedelta(days=3)
+        # Get yesterday's date
+        end_date = date.today() - timedelta(days=1)
+
+        if start_date > end_date:
+            click.echo("No new data to parse: start date is after end date")
+            return
+
+        current_date = start_date
+        while current_date <= end_date:
+            # Check if data is available for this date
+            response = api.session.head(kmurl(current_date))
+            if response.status_code != 200:
+                click.echo(f"\nInfo: No data available for {current_date}")
+                click.echo("Stopping parseall due to unavailable data")
+                return
+
+            click.echo(f"\nProcessing date: {current_date}")
+            try:
+                # Call parse command for the current date
+                ctx = click.get_current_context()
+                ctx.invoke(parse, date=current_date.isoformat())
+                # Update the latest date in config after successful parse
+                config.set_latest(current_date)
+            except Exception as e:
+                click.echo(f"\nError occurred while parsing {current_date}: {e}")
+                click.echo("Stopping parseall due to parse error")
+                return
+
+            # Move to next day
+            current_date += timedelta(days=1)
+
+        click.echo("\nFinished processing all available dates")
+
+    except Exception as e:
+        click.echo(f"Error in parseall: {e}")
+        return
 
 
 @app.cli.command()
