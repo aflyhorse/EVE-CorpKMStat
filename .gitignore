@@ -1,0 +1,11 @@
+*.pyc
+*~
+__pycache__
+.venv
+
+.coverage
+htmlcov
+
+instance/config.ini
+instance/database.db
+instance/temp
