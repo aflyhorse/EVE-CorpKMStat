@@ -14,7 +14,7 @@ import json
 import click
 
 from kmstat import app, db
-from kmstat.models import SolarSystem, ItemType, Character, Killmail
+from kmstat.models import SolarSystem, ItemType, Player, Character, Killmail
 from kmstat.api import API
 from kmstat.config import Config
 
@@ -33,6 +33,9 @@ def initdb(drop):
     if drop:
         db.drop_all()
     db.create_all()
+    nan_player = Player(title="nan_查无此人")
+    db.session.add(nan_player)
+    db.session.commit()
     click.echo("Initialized database.")
 
 
@@ -47,12 +50,12 @@ def kmurl(date: datetime) -> str:
 
 
 @app.cli.command()
-@click.option(
-    "--date",
-    default=date.today().isoformat(),
-    help="Date to parse, format in YYYY-MM-DD.",
-)
+@click.argument("date", default=date.today().isoformat())
 def parse(date):
+    """
+    Parse and download killmails for a given date.
+    If no date is provided, defaults to today.
+    """
     try:
         # Parse the date string
         parsed_date = datetime.fromisoformat(date)
@@ -141,9 +144,7 @@ def parse(date):
                     )
 
                     # Check if this killmail already exists
-                    existing_killmail = Killmail.query.filter_by(
-                        killmail_id=killmail_id
-                    ).first()
+                    existing_killmail = Killmail.query.filter_by(id=killmail_id).first()
 
                     if not existing_killmail:
                         # Get or create character using API
@@ -153,12 +154,16 @@ def parse(date):
                             character = api.get_character(config.endpoint, character_id)
                             if character:
                                 # Try to update player based on character title
-                                if not character.updatePlayer():
+                                if character.title is None:
+                                    # Fallback to default player
+                                    character.player = Player.query.first()
+                                    db.session.add(character)
+                                elif not character.updatePlayer():
                                     msg = f"Warning: Could not associate character {character.name}"
                                     msg += " with a player"
                                     click.echo(msg)
                                 new_killmail = Killmail(
-                                    killmail_id=killmail_id,
+                                    id=killmail_id,
                                     killmail_time=killmail_time,
                                     character_id=character_id,
                                     solar_system_id=solar_system_id,

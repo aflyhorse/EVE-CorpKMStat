@@ -12,9 +12,7 @@ class Player(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(nullable=False, unique=True)
     characters: Mapped[list["Character"]] = db.relationship(
-        "Character",
-        back_populates="player",
-        cascade="all, delete-orphan"
+        "Character", back_populates="player", cascade="all, delete-orphan"
     )
 
     @classmethod
@@ -83,7 +81,6 @@ class ItemType(db.Model):
 
 class Killmail(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
-    killmail_id: Mapped[int] = mapped_column(nullable=False)
     killmail_time: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
