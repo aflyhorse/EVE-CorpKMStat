@@ -4,6 +4,9 @@
 
 EVE-CorpKMStat is a Flask-based application designed to manage and analyze corporation statistics in the EVE Online universe. The application utilizes SQLAlchemy with SQLite as the database backend to store and retrieve data related to corporations.
 
+Player combination is based on in-game titles.
+
+
 ## Usage
 
 ### First-time
@@ -17,12 +20,27 @@ EVE-CorpKMStat is a Flask-based application designed to manage and analyze corpo
 
 1. Run ```flask updatesde``` to get updated SDE.
 
+### Notice
+
+* Manually combine or create player is made via ```flask updateplayer --char [character name] --title [existing or new title]```.
+
+
+## About Me
+
+I'm a long time EVE Online player, [Nadeko Hakomairos](https://evewho.com/character/94299194) of [Snow Moon City](https://evewho.com/corporation/98702000) of [Fraternity.](https://evewho.com/alliance/99003581)
+
+This project is built to simplify the management of my corp. My corp provide monthly rewards based on kills made. Feel free to contact me in game if you have problems or want to join my corp. The corp is UTC+8 Chinese based.
+
+In-game ISK donations are also appreciated :smile:
+
+
 ## Thanks
 
 Many thanks for:
 * [EVERef](https://everef.net) for packaged killmails.
 * [Fuzzwork](https://www.fuzzwork.co.uk/) for CCP Static Data Export Conversions.
 * [zKillboard](https://zkillboard.com/) for price estimation of killmail.
+
 
 ## License
 

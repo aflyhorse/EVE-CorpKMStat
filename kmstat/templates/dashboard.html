@@ -30,7 +30,14 @@
                             {% for rank, player in year_stats %}
                             <tr>
                                 <td>{{ rank }}</td>
-                                <td>{{ player.name }}</td>
+                                <td>
+                                    {% set name, color = player.name|detect_color %}
+                                    {% if color %}
+                                        <span style="color: {{ color }}">{{ name }}</span>
+                                    {% else %}
+                                        {{ name }}
+                                    {% endif %}
+                                </td>
                                 <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
                             </tr>
                             {% endfor %}
@@ -68,7 +75,14 @@
                             {% for rank, player in month_stats %}
                             <tr>
                                 <td>{{ rank }}</td>
-                                <td>{{ player.name }}</td>
+                                <td>
+                                    {% set name, color = player.name|detect_color %}
+                                    {% if color %}
+                                        <span style="color: {{ color }}">{{ name }}</span>
+                                    {% else %}
+                                        {{ name }}
+                                    {% endif %}
+                                </td>
                                 <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
                             </tr>
                             {% endfor %}
