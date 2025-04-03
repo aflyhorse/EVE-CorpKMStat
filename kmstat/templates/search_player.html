@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}按玩家查询{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>按玩家查询</h2>
+    <div class="card mt-4">
+        <div class="card-body">
+            <form method="get" action="{{ url_for('search_player') }}">
+                <div class="mb-3">
+                    <label for="player" class="form-label">玩家名称</label>
+                    <select class="form-select" id="player" name="player">
+                        <option value="">请选择玩家...</option>
+                        {% for player in players %}
+                            {% set name, color = player.title|detect_color %}
+                            <option value="{{ player.id }}" {% if player.id == selected_player %}selected{% endif %}>
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="start_date" class="form-label">开始日期</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date if start_date }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="end_date" class="form-label">结束日期</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date if end_date }}">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">查询</button>
+            </form>
+        </div>
+    </div>
+
+    {% if selected_player %}
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">所属角色</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for character in player_characters %}
+                        <div class="list-group-item">
+                            {{ character.name }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">击杀记录</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>击杀ID</th>
+                                    <th>击杀时间</th>
+                                    <th>角色名称</th>
+                                    <th>星系</th>
+                                    <th>被击毁舰船</th>
+                                    <th class="text-end">价值</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for kill in kills %}
+                                <tr>
+                                    <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id }}</a></td>
+                                    <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ kill.character.name }}</td>
+                                    <td>{{ kill.solar_system.name }}</td>
+                                    <td>{{ kill.victim_ship_type.name }}</td>
+                                    <td class="text-end">{{ "{:,.2f}".format(kill.total_value) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

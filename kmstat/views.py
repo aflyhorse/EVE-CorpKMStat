@@ -76,9 +76,82 @@ def dashboard():
     )
 
 
-@app.route("/detailed-search")
-def detailed_search():
-    return render_template("detailed_search.html", config=config)
+@app.route("/search-player")
+def search_player():
+    # Get all players for the dropdown
+    players = Player.query.order_by(Player.title).all()
+
+    # Get search parameters
+    player_id = request.args.get("player", type=int)
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+
+    kills = []
+    player_characters = []
+    if player_id:
+        # Get player's characters
+        player_characters = (
+            Character.query.filter(Character.player_id == player_id)
+            .order_by(Character.name)
+            .all()
+        )
+
+        # Get killmails query
+        query = (
+            Killmail.query.join(Character).join(Player).filter(Player.id == player_id)
+        )
+
+        # Add date filters if provided
+        if start_date:
+            query = query.filter(Killmail.killmail_time >= start_date)
+        if end_date:
+            query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
+
+        kills = query.order_by(Killmail.killmail_time.desc()).all()
+
+    return render_template(
+        "search_player.html",
+        players=players,
+        selected_player=player_id,
+        start_date=start_date,
+        end_date=end_date,
+        kills=kills,
+        player_characters=player_characters,
+        config=config,
+    )
+
+
+@app.route("/search-char")
+def search_char():
+    # Get all characters for the dropdown
+    characters = Character.query.order_by(Character.name).all()
+
+    # Get search parameters
+    character_id = request.args.get("character", type=int)
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+
+    kills = []
+    if character_id:
+        query = Killmail.query.filter(Killmail.character_id == character_id)
+
+        # Add date filters if provided
+        if start_date:
+            query = query.filter(Killmail.killmail_time >= start_date)
+        if end_date:
+            query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
+
+        kills = query.order_by(Killmail.killmail_time.desc()).all()
+
+    return render_template(
+        "search_char.html",
+        characters=characters,
+        selected_character=character_id,
+        start_date=start_date,
+        end_date=end_date,
+        kills=kills,
+        config=config,
+    )
 
 
 @app.route("/character-claim")
