@@ -1,5 +1,5 @@
 {% extends "base.html.jinja2" %}
-{% block title %}Dashboard{% endblock %}
+{% block title %}K头怪排名{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -23,22 +23,36 @@
                             <tr>
                                 <th>排名</th>
                                 <th>玩家</th>
-                                <th class="text-end">总击杀额</th>
+                                <th class="text-end" style="min-width: 200px;">总击杀额</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for rank, player in year_stats %}
+                            {% set percentage = (player.total_value / year_stats[0][1].total_value * 100) if year_stats|length > 0 else 0 %}
+                            {% set colors = ['#ff9999', '#99ff99', '#99ccff', '#ffcc99', '#ff99cc', '#99ffcc'] %}
+                            {% set color = colors[loop.index0 % colors|length] %}
                             <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
                                 <td>{{ rank }}</td>
                                 <td>
-                                    {% set name, color = player.name|detect_color %}
-                                    {% if color %}
-                                        <span style="color: {{ color }}">{{ name }}</span>
+                                    {% set name, text_color = player.name|detect_color %}
+                                    {% if text_color %}
+                                        <span style="color: {{ text_color }}">{{ name }}</span>
                                     {% else %}
                                         {{ name }}
                                     {% endif %}
                                 </td>
-                                <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
+                                <td class="text-end">
+                                    <div class="progress position-relative" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" 
+                                            style="width: {{ percentage }}%; background-color: {{ color }};"
+                                            aria-valuenow="{{ percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                        <span class="position-absolute h-100 d-flex align-items-center" 
+                                              style="color: black; right: 8px;">
+                                            {{ "{:,.2f}".format(player.total_value) }}
+                                        </span>
+                                    </div>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -68,22 +82,36 @@
                             <tr>
                                 <th>排名</th>
                                 <th>玩家</th>
-                                <th class="text-end">总击杀额</th>
+                                <th class="text-end" style="min-width: 200px;">总击杀额</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for rank, player in month_stats %}
+                            {% set percentage = (player.total_value / month_stats[0][1].total_value * 100) if month_stats|length > 0 else 0 %}
+                            {% set colors = ['#ff9999', '#99ff99', '#99ccff', '#ffcc99', '#ff99cc', '#99ffcc'] %}
+                            {% set color = colors[loop.index0 % colors|length] %}
                             <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
                                 <td>{{ rank }}</td>
                                 <td>
-                                    {% set name, color = player.name|detect_color %}
-                                    {% if color %}
-                                        <span style="color: {{ color }}">{{ name }}</span>
+                                    {% set name, text_color = player.name|detect_color %}
+                                    {% if text_color %}
+                                        <span style="color: {{ text_color }}">{{ name }}</span>
                                     {% else %}
                                         {{ name }}
                                     {% endif %}
                                 </td>
-                                <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
+                                <td class="text-end">
+                                    <div class="progress position-relative" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" 
+                                            style="width: {{ percentage }}%; background-color: {{ color }};"
+                                            aria-valuenow="{{ percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                        </div>
+                                        <span class="position-absolute h-100 d-flex align-items-center" 
+                                              style="color: black; right: 8px;">
+                                            {{ "{:,.2f}".format(player.total_value) }}
+                                        </span>
+                                    </div>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
