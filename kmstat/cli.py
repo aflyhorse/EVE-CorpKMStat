@@ -199,15 +199,14 @@ def parse(date):
 @app.cli.command()
 def parseall():
     """
-    Parse killmails from config.latest date (inclusive) to yesterday (inclusive).
+    Parse killmails from config.latest date (inclusive) to today.
     Stops immediately if killmail data is unavailable or if parsing fails.
     Updates config.latest after each successful parse.
     """
     try:
         # Get the starting date from config, backtrace 3 days for completeness
         start_date = config.latest - timedelta(days=3)
-        # Get yesterday's date
-        end_date = date.today() - timedelta(days=1)
+        end_date = date.today()
 
         if start_date > end_date:
             click.echo("No new data to parse: start date is after end date")
@@ -268,6 +267,9 @@ def updateplayer(char, title):
 
 @app.cli.command()
 def updatesde():
+    """
+    Update solar systems and item types database from CCP SDE.
+    """
     try:
         url = "https://www.fuzzwork.co.uk/dump/latest/mapSolarSystems.csv.bz2"
         click.echo(f"Downloading solar systems data from {url}")
