@@ -31,31 +31,31 @@ class Character(db.Model):
         "Killmail", back_populates="character"
     )
 
-    def updatePlayer(self, title: str = None, force_create: bool = False) -> bool:
+    def updatePlayer(self, title: str = None) -> bool:
         """
         Update the character's player based on title.
-        If title is provided, use that to find player.
+        If title is provided, use that to find or create a player.
         If title is not provided, use self.title if available.
-        If force_create is True, create a new player if one doesn't exist.
-        Returns True if successful, False if error occurred or player not found.
+        Will always create a new player if character has a title and no matching player exists.
+        Returns True if successful, False if error occurred.
         """
         try:
-            search_title = title if title is not None else self.title
+            # If title is provided, update the character's title
+            if title is not None:
+                self.title = title
 
-            if search_title is None:
+            if self.title is None:
                 click.echo("Error: No title provided and character has no title")
                 return False
 
             # Try to find existing player
-            player = Player.find_by_title(search_title)
+            player = Player.find_by_title(self.title)
 
+            # Always create player if none exists and we have a title
             if player is None:
-                if force_create:
-                    player = Player(title=search_title)
-                    db.session.add(player)
-                else:
-                    click.echo(f"Error: No player found with title '{search_title}'")
-                    return False
+                player = Player(title=self.title)
+                db.session.add(player)
+                click.echo(f"Info: Created new player {player.title}")
 
             # Ensure character is in session
             if self not in db.session:
@@ -68,7 +68,7 @@ class Character(db.Model):
 
         except Exception as e:
             db.session.rollback()
-            click.echo(f"Error updating player: {str(e)}")
+            click.echo(f"Error: Error updating character: {str(e)}")
             return False
 
 
