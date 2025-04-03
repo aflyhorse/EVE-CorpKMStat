@@ -9,7 +9,9 @@ EVE-CorpKMStat is a Flask-based application designed to manage and analyze corpo
 ### First-time
 
 1. Copy and edit ```instance/config.ini```.
-2. Run ```flask initdb``` and ```flask flask updatesde``` to init database.
+1. Run ```flask initdb``` and ```flask updatesde``` to init database.
+1. Run ```flask parseall``` and monitor its output.
+3. Copy and edit ```scripts/kmstatdailyup.sh``` to ```/etc/cron.daily/```.
 
 ### After major update of Tranquility
 
