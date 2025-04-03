@@ -9,15 +9,14 @@
             <form method="get" action="{{ url_for('search_player') }}">
                 <div class="mb-3">
                     <label for="player" class="form-label">玩家名称</label>
-                    <select class="form-select" id="player" name="player">
-                        <option value="">请选择玩家...</option>
+                    <input class="form-control" list="playerList" id="player" name="player" placeholder="双击或输入搜索玩家" value="{{ selected_player_name if selected_player_name }}">
+                    <datalist id="playerList">
                         {% for player in players %}
                             {% set name, color = player.title|detect_color %}
-                            <option value="{{ player.id }}" {% if player.id == selected_player %}selected{% endif %}>
-                                {{ name }}
-                            </option>
+                            <option value="{{ name }}" data-id="{{ player.id }}">
                         {% endfor %}
-                    </select>
+                    </datalist>
+                    <input type="hidden" name="player_id" id="player_id" value="{{ selected_player }}">
                 </div>
                 <div class="row">
                     <div class="col-md-6 mb-3">
@@ -44,7 +43,7 @@
                 <div class="card-body">
                     <div class="list-group">
                         {% for character in player_characters %}
-                        <div class="list-group-item">
+                        <div class="list-group-item list-group-item-action clickable-row" onclick="window.location='{{ url_for('search_char', character=character.id) }}'">
                             {{ character.name }}
                         </div>
                         {% endfor %}
@@ -66,7 +65,7 @@
                                     <th>击杀时间</th>
                                     <th>角色名称</th>
                                     <th>星系</th>
-                                    <th>被击毁舰船</th>
+                                    <th>击毁舰船</th>
                                     <th class="text-end">价值</th>
                                 </tr>
                             </thead>
@@ -90,4 +89,20 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+document.getElementById('player').addEventListener('input', function(e) {
+    const datalist = document.getElementById('playerList');
+    const hiddenInput = document.getElementById('player_id');
+    const options = datalist.getElementsByTagName('option');
+    
+    for(let option of options) {
+        if(option.value === this.value) {
+            hiddenInput.value = option.dataset.id;
+            return;
+        }
+    }
+    hiddenInput.value = '';
+});
+</script>
 {% endblock %}

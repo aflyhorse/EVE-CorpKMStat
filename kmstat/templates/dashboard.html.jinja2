@@ -18,7 +18,7 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    <table class="table table-hover">
                         <thead>
                             <tr>
                                 <th>排名</th>
@@ -28,7 +28,7 @@
                         </thead>
                         <tbody>
                             {% for rank, player in year_stats %}
-                            <tr>
+                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
                                 <td>{{ rank }}</td>
                                 <td>
                                     {% set name, color = player.name|detect_color %}
@@ -63,7 +63,7 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-striped">
+                    <table class="table table-hover">
                         <thead>
                             <tr>
                                 <th>排名</th>
@@ -73,7 +73,7 @@
                         </thead>
                         <tbody>
                             {% for rank, player in month_stats %}
-                            <tr>
+                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
                                 <td>{{ rank }}</td>
                                 <td>
                                     {% set name, color = player.name|detect_color %}

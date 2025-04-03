@@ -7,6 +7,21 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
     <title>{% block title %}{% endblock %} - {{ config.sitename }}</title>
     {{ bootstrap.load_css() }}
+    <style>
+        .clickable-row {
+            cursor: pointer;
+        }
+
+        .clickable-row a {
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .colored-link {
+            text-decoration: none;
+        }
+    </style>
+    {% block styles %}{% endblock %}
     {% endblock %}
 </head>
 <body>
