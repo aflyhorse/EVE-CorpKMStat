@@ -29,7 +29,7 @@ def initdb(drop):
     if drop:
         db.drop_all()
     db.create_all()
-    nan_player = Player(title="nan_查无此人")
+    nan_player = Player(title="__查无此人__")
     db.session.add(nan_player)
     db.session.commit()
     click.echo("Initialized database.")

@@ -31,6 +31,7 @@ def dashboard():
         db.session.query(
             Character.player_id,
             Player.title.label("name"),
+            Player.id.label("player_id"),
             func.sum(Killmail.total_value).label("total_value"),
         )
         .join(Character.player)
@@ -46,6 +47,7 @@ def dashboard():
         db.session.query(
             Character.player_id,
             Player.title.label("name"),
+            Player.id.label("player_id"),
             func.sum(Killmail.total_value).label("total_value"),
         )
         .join(Character.player)
@@ -64,7 +66,7 @@ def dashboard():
     month_stats = [(i + 1, stat) for i, stat in enumerate(month_stats)]
 
     return render_template(
-        "dashboard.html",
+        "dashboard.html.jinja2",
         years=range(start_year, current_year + 1),
         current_year=current_year,
         current_month=current_month,
@@ -82,36 +84,44 @@ def search_player():
     players = Player.query.order_by(Player.title).all()
 
     # Get search parameters
-    player_id = request.args.get("player", type=int)
+    player_id = request.args.get("player_id", type=int)
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
 
     kills = []
     player_characters = []
+    selected_player_name = None
+
     if player_id:
-        # Get player's characters with killmails loaded
-        player_characters = (
-            Character.query.options(db.joinedload(Character.killmails))
-            .filter(Character.player_id == player_id)
-            .order_by(Character.name)
-            .all()
-        )
+        selected_player = Player.query.get(player_id)
+        if selected_player:
+            selected_player_name = selected_player.title
+            # Get player's characters with killmails loaded
+            player_characters = (
+                Character.query.options(db.joinedload(Character.killmails))
+                .filter(Character.player_id == player_id)
+                .order_by(Character.name)
+                .all()
+            )
 
-        # Get killmails from all player's characters using the relationship
-        query = Killmail.query.join(Character).filter(Character.player_id == player_id)
+            # Get killmails from all player's characters using the relationship
+            query = Killmail.query.join(Character).filter(
+                Character.player_id == player_id
+            )
 
-        # Add date filters if provided
-        if start_date:
-            query = query.filter(Killmail.killmail_time >= start_date)
-        if end_date:
-            query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
+            # Add date filters if provided
+            if start_date:
+                query = query.filter(Killmail.killmail_time >= start_date)
+            if end_date:
+                query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
 
-        kills = query.order_by(Killmail.id.desc()).all()
+            kills = query.order_by(Killmail.id.desc()).all()
 
     return render_template(
-        "search_player.html",
+        "search_player.html.jinja2",
         players=players,
         selected_player=player_id,
+        selected_player_name=selected_player_name,
         start_date=start_date,
         end_date=end_date,
         kills=kills,
@@ -149,7 +159,7 @@ def search_char():
             kills = query.order_by(Killmail.id.desc()).all()
 
     return render_template(
-        "search_char.html",
+        "search_char.html.jinja2",
         characters=characters,
         selected_character=character_id,
         start_date=start_date,
@@ -169,4 +179,6 @@ def character_claim():
         else []
     )
 
-    return render_template("character_claim.html", characters=characters, config=config)
+    return render_template(
+        "character_claim.html.jinja2", characters=characters, config=config
+    )

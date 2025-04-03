@@ -2,7 +2,6 @@ Bootstrap-Flask
 Flask
 Flask-Migrate
 Flask-SQLAlchemy
-Flask-WTF
 requests
 pandas
 python-dotenv
