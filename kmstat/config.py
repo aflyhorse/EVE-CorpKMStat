@@ -2,6 +2,7 @@
 Application configuration.
 """
 
+import os
 import pytz
 from configparser import ConfigParser
 from datetime import datetime
@@ -14,16 +15,21 @@ class Config:
         self.config = ConfigParser()
         self.config.read(self.config_file)
 
-        self.endpoint = self.config.get("DEFAULT", "esi_url")
         self.hoster = self.config.get("DEFAULT", "hoster")
         self.corporation_id = self.config.getint("DEFAULT", "corporation_id")
+        self.sitename = self.config.get("DEFAULT", "sitename", fallback="EVE Corp KM Stats")
 
         from kmstat.api import api
+
+        # if instance/logo.png not exist, download it
+        if not os.path.exists("kmstat/static/logo.png"):
+            os.makedirs("kmstat/static", exist_ok=True)
+            api.save_corporation_logo(self.corporation_id, "kmstat/static/logo.png")
 
         if not self.config.has_option("DEFAULT", "alliance_id") or not self.config.get(
             "DEFAULT", "alliance_id"
         ):
-            self.alliance_id = api.get_alliance_id(self.endpoint, self.corporation_id)
+            self.alliance_id = api.get_alliance_id(self.corporation_id)
             self.config.set("DEFAULT", "alliance_id", str(self.alliance_id))
             with open(self.config_file, "w") as configfile:
                 self.config.write(configfile)

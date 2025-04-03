@@ -11,3 +11,5 @@ instance/config.ini
 instance/database.db
 instance/*.log
 instance/temp
+
+kmstat/static/logo.png

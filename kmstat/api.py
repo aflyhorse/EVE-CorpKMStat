@@ -10,6 +10,8 @@ from threading import Lock
 class API:
 
     limits_per_sec = 10
+    ESI_ENDPOINT = "https://esi.evetech.net/latest"
+    ESI_IMAGE = "https://images.evetech.net"
 
     def __init__(self):
         self.session = requests.Session()
@@ -40,21 +42,36 @@ class API:
         self._enforce_rate_limit()
         return self.session.request(method, url, **kwargs)
 
-    def get_alliance_id(self, endpoint, corporation_id) -> int:
+    def get_alliance_id(self, corporation_id) -> int:
         """
         Get the alliance ID for a given corporation ID from EVE Online ESI.
         """
-        url = f"{endpoint}/corporations/{corporation_id}/?datasource=tranquility"
+        url = (
+            f"{self.ESI_ENDPOINT}/corporations/{corporation_id}/?datasource=tranquility"
+        )
         response = self._make_request("GET", url)
         if response.status_code == 200:
             return response.json().get("alliance_id", 0)
         return None
 
-    def get_character(self, endpoint, character_id):
+    def save_corporation_logo(self, corporation_id, image_path):
+        """
+        Save the corporation logo to a file.
+        """
+        url = f"{self.ESI_IMAGE}/corporations/{corporation_id}/logo"
+        response = self._make_request("GET", url, stream=True)
+        if response.status_code == 200:
+            with open(image_path, "wb") as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            return True
+        return False
+
+    def get_character(self, character_id):
         """
         Get character information from EVE Online ESI.
         """
-        url = f"{endpoint}/characters/{character_id}/?datasource=tranquility"
+        url = f"{self.ESI_ENDPOINT}/characters/{character_id}/?datasource=tranquility"
         response = self._make_request("GET", url)
         if response.status_code == 200:
             from kmstat.models import Character

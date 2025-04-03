@@ -4,14 +4,15 @@
     {% block head %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{% endblock %} - EVE Corp KM Stats</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    <title>{% block title %}{% endblock %} - {{ config.sitename }}</title>
     {{ bootstrap.load_css() }}
     {% endblock %}
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">EVE Corp KM Stats</a>
+            <a class="navbar-brand" href="{{ url_for('dashboard') }}">{{ config.sitename }}</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
