@@ -79,3 +79,7 @@ class API:
                 return data[0].get("zkb", {}).get("totalValue")
             return None
         return None
+
+
+# Create a single instance to be used throughout the application
+api = API()

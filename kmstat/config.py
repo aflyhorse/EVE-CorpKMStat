@@ -18,9 +18,8 @@ class Config:
         self.hoster = self.config.get("DEFAULT", "hoster")
         self.corporation_id = self.config.getint("DEFAULT", "corporation_id")
 
-        from kmstat.api import API
+        from kmstat.api import api
 
-        api = API()
         if not self.config.has_option("DEFAULT", "alliance_id") or not self.config.get(
             "DEFAULT", "alliance_id"
         ):
@@ -40,10 +39,7 @@ class Config:
             self.config.get("DEFAULT", "startupdate"), "%Y-%m-%d"
         ).date()
 
-        latest = self.config.get(
-            "STATUS",
-            "latest",
-        )
+        latest = self.config.get("STATUS", "latest")
         if latest:
             self.latest = datetime.strptime(
                 latest,
@@ -75,3 +71,7 @@ class Config:
         self.config.set("STATUS", "sdeversion", sdeversion.strftime("%Y-%m-%d"))
         with open(self.config_file, "w") as configfile:
             self.config.write(configfile)
+
+
+# Create a single instance to be used throughout the application
+config = Config()

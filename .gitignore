@@ -8,4 +8,5 @@ htmlcov
 
 instance/config.ini
 instance/database.db
+instance/*.log
 instance/temp

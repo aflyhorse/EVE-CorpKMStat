@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Year Stats -->
+    <div class="col-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">年度击杀统计</h5>
+                    <select class="form-select w-auto" id="yearSelect">
+                        {% for year in years %}
+                        <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}年</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>玩家</th>
+                                <th class="text-end">总击杀额</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rank, player in year_stats %}
+                            <tr>
+                                <td>{{ rank }}</td>
+                                <td>{{ player.name }}</td>
+                                <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Month Stats -->
+    <div class="col-6">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">月度击杀统计 ({{ selected_year }}年)</h5>
+                    <select class="form-select w-auto" id="monthSelect">
+                        {% for month in range(1, 13) %}
+                        <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}月</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>玩家</th>
+                                <th class="text-end">总击杀额</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rank, player in month_stats %}
+                            <tr>
+                                <td>{{ rank }}</td>
+                                <td>{{ player.name }}</td>
+                                <td class="text-end">{{ "{:,.2f}".format(player.total_value) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const yearSelect = document.getElementById('yearSelect');
+    const monthSelect = document.getElementById('monthSelect');
+
+    yearSelect.addEventListener('change', function() {
+        window.location.href = "{{ url_for('dashboard') }}?year=" + yearSelect.value + "&month=" + monthSelect.value;
+    });
+
+    monthSelect.addEventListener('change', function() {
+        window.location.href = "{{ url_for('dashboard') }}?year=" + yearSelect.value + "&month=" + monthSelect.value;
+    });
+});
+</script>
+{% endblock %}

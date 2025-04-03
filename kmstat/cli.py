@@ -15,12 +15,8 @@ import click
 
 from kmstat import app, db
 from kmstat.models import SolarSystem, ItemType, Player, Character, Killmail
-from kmstat.api import API
-from kmstat.config import Config
-
-# Initialize config and API after all imports
-config = Config()
-api = API()
+from kmstat.api import api
+from kmstat.config import config
 
 
 @app.cli.command()
