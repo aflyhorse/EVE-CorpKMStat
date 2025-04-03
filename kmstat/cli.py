@@ -11,6 +11,7 @@ import pandas as pd
 import bz2
 import io
 import json
+import time
 import click
 
 from kmstat import app, db
@@ -45,6 +46,43 @@ def kmurl(date: date) -> str:
     return f"https://data.everef.net/killmails/{year}/killmails-{year}-{month}-{day}.tar.bz2"
 
 
+def download_with_retry(url: str, file_path: Path, max_retries: int = 3) -> bool:
+    """
+    Download a file with retry logic.
+    Returns True if download was successful, False otherwise.
+    """
+    for attempt in range(max_retries):
+        try:
+            response = api.session.get(url, stream=True)
+            response.raise_for_status()
+
+            # Delete partially downloaded file if it exists
+            if file_path.exists():
+                file_path.unlink()
+
+            with open(file_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return True
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                retry_delay = (attempt + 1) * 5  # Exponential backoff
+                click.echo(
+                    f"Download failed (attempt {attempt + 1}/{max_retries}): {e}"
+                )
+                click.echo(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+            else:
+                click.echo(f"Download failed after {max_retries} attempts: {e}")
+                # Clean up partial download if it exists
+                if file_path.exists():
+                    file_path.unlink()
+                return False
+    return False
+
+
 @app.cli.command()
 @click.argument("date", default=date.today().isoformat())
 def parse(date):
@@ -55,9 +93,6 @@ def parse(date):
     try:
         # Parse the date string
         parsed_date = datetime.fromisoformat(date)
-        year = parsed_date.year
-        month = f"{parsed_date.month:02d}"
-        day = f"{parsed_date.day:02d}"
         url = kmurl(parsed_date)
 
         # Create temp directory if it doesn't exist
@@ -65,17 +100,12 @@ def parse(date):
         temp_dir.mkdir(exist_ok=True)
 
         # Download file path
-        file_path = temp_dir / f"killmails-{year}-{month}-{day}.tar.bz2"
+        file_path = temp_dir / f"killmails-{parsed_date.strftime('%Y-%m-%d')}.tar.bz2"
 
         click.echo(f"Downloading killmails for {date} from {url}")
 
-        # Download the file using API session
-        response = api.session.get(url, stream=True)
-        response.raise_for_status()  # Raise exception for HTTP errors
-
-        with open(file_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        if not download_with_retry(url, file_path):
+            raise Exception("Failed to download killmail data")
 
         click.echo(f"Downloaded to {file_path}")
 
