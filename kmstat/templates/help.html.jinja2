@@ -1,0 +1,26 @@
+{% extends "base.html.jinja2" %}
+{% block title %}说明{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>说明</h2>
+    <div class="card mt-4">
+        <div class="card-body">
+            <ul class="list-unstyled">
+                <li class="mb-3">
+                    <p>最新更新时间请查看右上角，系统一般滞后至多两天</p>
+                </li>
+                <li class="mb-3">
+                    <p>如果你的KM没有显示在查询结果里，请检查它是否被上传至<a href="https://zkillboard.com/corporation/{{ config.corporation_id }}" target="_blank">zKillboard</a>。点击右上角授权登录你的击杀角色。</p>
+                </li>
+                <li class="mb-3">
+                    <p>若需要历史数据补录，请将zKB链接发至网站管理员。</p>
+                </li>
+                <li class="mb-3">
+                    <p>玩家头衔的修改、合并，无头衔角色的认领，请联系您军团的管理和网站管理员。</p>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -182,3 +182,11 @@ def character_claim():
     return render_template(
         "character_claim.html.jinja2", characters=characters, config=config
     )
+
+
+@app.route("/help")
+def help_page():
+    return render_template(
+        "help.html.jinja2",
+        config=config,
+    )
