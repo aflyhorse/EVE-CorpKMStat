@@ -260,8 +260,9 @@ def parseall(start, end):
                 # Call parse command for the current date
                 ctx = click.get_current_context()
                 ctx.invoke(parse, date=current_date.isoformat())
-                # Update the latest date in config after successful parse
-                config.set_latest(current_date)
+                # Update the latest date in config if it is outdated
+                if current_date > config.latest:
+                    config.set_latest(current_date)
             except Exception as e:
                 click.echo(f"\nError: Error occurred while parsing {current_date}: {e}")
                 click.echo("Info: Stopping parseall due to parse error")
