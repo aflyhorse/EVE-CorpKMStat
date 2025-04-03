@@ -27,14 +27,17 @@ class Character(db.Model):
     title: Mapped[str] = mapped_column(nullable=True)
     player_id: Mapped[int] = mapped_column(db.ForeignKey("player.id"))
     player: Mapped["Player"] = db.relationship("Player", back_populates="characters")
-    killmails: Mapped[list["Killmail"]] = db.relationship("Killmail", back_populates="character")
+    killmails: Mapped[list["Killmail"]] = db.relationship(
+        "Killmail", back_populates="character"
+    )
 
-    def updatePlayer(self, title: str = None) -> bool:
+    def updatePlayer(self, title: str = None, force_create: bool = False) -> bool:
         """
         Update the character's player based on title.
-        If title is provided, use that to find/create player.
+        If title is provided, use that to find player.
         If title is not provided, use self.title if available.
-        Returns True if successful, False if error occurred.
+        If force_create is True, create a new player if one doesn't exist.
+        Returns True if successful, False if error occurred or player not found.
         """
         try:
             search_title = title if title is not None else self.title
@@ -46,14 +49,13 @@ class Character(db.Model):
             # Try to find existing player
             player = Player.find_by_title(search_title)
 
-            if player is None and title is not None:
-                # Only echo error if specific title was provided but not found
-                click.echo(f"Error: No player found with title '{search_title}'")
-                return False
-            elif player is None:
-                # Create new player if using self.title
-                player = Player(title=search_title)
-                db.session.add(player)
+            if player is None:
+                if force_create:
+                    player = Player(title=search_title)
+                    db.session.add(player)
+                else:
+                    click.echo(f"Error: No player found with title '{search_title}'")
+                    return False
 
             # Ensure character is in session
             if self not in db.session:

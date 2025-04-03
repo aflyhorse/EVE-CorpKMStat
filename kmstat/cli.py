@@ -282,11 +282,12 @@ def updateplayer(char, title):
     """
     Update the player for a character based on title.
     If title is not provided, use the character's existing title.
+    Will force create a new player if one doesn't exist with the given title.
     """
     try:
         character = Character.query.filter_by(name=char).first()
         if character:
-            if character.updatePlayer(title):
+            if character.updatePlayer(title, force_create=True):
                 click.echo(f"Updated player for {char} with title '{title}'")
             else:
                 click.echo(f"Failed to update player for {char}")
