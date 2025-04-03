@@ -4,7 +4,12 @@
 
 EVE-CorpKMStat is a Flask-based application designed to manage and analyze corporation statistics in the EVE Online universe. The application utilizes SQLAlchemy with SQLite as the database backend to store and retrieve data related to corporations.
 
-Player combination is based on in-game titles.
+Player combination is based on in-game titles. The project *does not require CCP ESI* and rely only on public data.
+
+
+## Example
+
+[SMAC雪月城击杀榜](https://smac.lunes.faith)
 
 
 ## Usage
@@ -20,9 +25,10 @@ Player combination is based on in-game titles.
 
 1. Run ```flask updatesde``` to get updated SDE.
 
-### Notice
+### CLI tools
 
 * Manually combine or create player is made via ```flask updateplayer --char [character name] --title [existing or new title]```.
+* Use ```flask parseall --start [startdate] --end [enddate]``` to force update on given range.
 
 
 ## About Me
