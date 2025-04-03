@@ -12,6 +12,7 @@ class API:
     limits_per_sec = 10
     ESI_ENDPOINT = "https://esi.evetech.net/latest"
     ESI_IMAGE = "https://images.evetech.net"
+    ZKB_ENDPOINT = "https://zkillboard.com/api"
 
     def __init__(self):
         self.session = requests.Session()
@@ -87,7 +88,7 @@ class API:
         """
         Get the value of a killmail from zKillboard API.
         """
-        url = f"https://zkillboard.com/api/killID/{killmail_id}/"
+        url = f"{self.ZKB_ENDPOINT}/killID/{killmail_id}/"
         response = self._make_request("GET", url)
         if response.status_code == 200:
             data = response.json()

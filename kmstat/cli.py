@@ -148,7 +148,7 @@ def parse(date):
 
                         # If character doesn't exist, try to get it from ESI
                         if not character and character_id:
-                            character = api.get_character(config.endpoint, character_id)
+                            character = api.get_character(character_id)
                             if character:
                                 # Try to update player based on character title
                                 if character.title is None:
@@ -272,8 +272,9 @@ def updatesde():
     """
     Update solar systems and item types database from CCP SDE.
     """
+    FUZZWORK_URL = "https://www.fuzzwork.co.uk/dump/latest"
     try:
-        url = "https://www.fuzzwork.co.uk/dump/latest/mapSolarSystems.csv.bz2"
+        url = f"{FUZZWORK_URL}/mapSolarSystems.csv.bz2"
         click.echo(f"Downloading solar systems data from {url}")
 
         # Download the compressed file using API session
@@ -330,7 +331,7 @@ def updatesde():
         click.echo(f"Error updating solar systems database: {e}")
 
     try:
-        url = "https://www.fuzzwork.co.uk/dump/latest/invTypes.csv.bz2"
+        url = f"{FUZZWORK_URL}/invTypes.csv.bz2"
         click.echo(f"Downloading item types data from {url}")
 
         # Download the compressed file using API session
