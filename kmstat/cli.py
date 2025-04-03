@@ -145,38 +145,40 @@ def parse(date):
                     if not existing_killmail:
                         # Get or create character using API
                         character = Character.query.filter_by(id=character_id).first()
+
+                        # If character doesn't exist, try to get it from ESI
                         if not character and character_id:
-                            # Get character details from ESI API
                             character = api.get_character(config.endpoint, character_id)
                             if character:
                                 # Try to update player based on character title
                                 if character.title is None:
                                     # Fallback to default player
                                     character.player = Player.query.first()
-                                    db.session.add(character)
                                 elif not character.updatePlayer():
                                     msg = f"Warning: Could not associate character {character.name}"
                                     msg += " with a player"
                                     click.echo(msg)
-                                new_killmail = Killmail(
-                                    id=killmail_id,
-                                    killmail_time=killmail_time,
-                                    character_id=character_id,
-                                    solar_system_id=solar_system_id,
-                                    victim_ship_type_id=victim_ship_type_id,
-                                    total_value=api.get_killmail_value(killmail_id),
-                                )
-                                db.session.add(new_killmail)
-                                db.session.commit()
-                                inserted_count += 1
-                                click.echo(
-                                    f"Inserted killmail {killmail_id} into database"
-                                )
-                            else:
-                                click.echo(
-                                    f"Warning: Character {character_id} not found in ESI"
-                                )
-                                click.echo(f"Skipping killmail {killmail_id}")
+                                db.session.add(character)
+
+                        # If we have a valid character (either existing or new), create the killmail
+                        if character:
+                            new_killmail = Killmail(
+                                id=killmail_id,
+                                killmail_time=killmail_time,
+                                character_id=character_id,
+                                solar_system_id=solar_system_id,
+                                victim_ship_type_id=victim_ship_type_id,
+                                total_value=api.get_killmail_value(killmail_id),
+                            )
+                            db.session.add(new_killmail)
+                            db.session.commit()
+                            inserted_count += 1
+                            click.echo(f"Inserted killmail {killmail_id} into database")
+                        else:
+                            click.echo(
+                                f"Warning: Character {character_id} not found in ESI"
+                            )
+                            click.echo(f"Skipping killmail {killmail_id}")
 
             # Remove the processed file
             os.remove(json_file)

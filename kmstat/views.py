@@ -26,7 +26,7 @@ def dashboard():
     except (TypeError, ValueError):
         selected_month = current_month
 
-    # Query for yearly stats
+    # Query for yearly stats using character.killmails relationship
     year_stats = (
         db.session.query(
             Character.player_id,
@@ -34,14 +34,14 @@ def dashboard():
             func.sum(Killmail.total_value).label("total_value"),
         )
         .join(Character.player)
-        .join(Killmail, Killmail.character_id == Character.id)
+        .join(Character.killmails)
         .filter(func.strftime("%Y", Killmail.killmail_time) == str(selected_year))
         .group_by(Character.player_id)
         .order_by(func.sum(Killmail.total_value).desc())
         .all()
     )
 
-    # Query for monthly stats (for selected year and month)
+    # Query for monthly stats using character.killmails relationship
     month_stats = (
         db.session.query(
             Character.player_id,
@@ -49,7 +49,7 @@ def dashboard():
             func.sum(Killmail.total_value).label("total_value"),
         )
         .join(Character.player)
-        .join(Killmail, Killmail.character_id == Character.id)
+        .join(Character.killmails)
         .filter(
             func.strftime("%Y", Killmail.killmail_time) == str(selected_year),
             func.strftime("%m", Killmail.killmail_time) == f"{selected_month:02d}",
@@ -89,17 +89,16 @@ def search_player():
     kills = []
     player_characters = []
     if player_id:
-        # Get player's characters
+        # Get player's characters with killmails loaded
         player_characters = (
-            Character.query.filter(Character.player_id == player_id)
+            Character.query.options(db.joinedload(Character.killmails))
+            .filter(Character.player_id == player_id)
             .order_by(Character.name)
             .all()
         )
 
-        # Get killmails query
-        query = (
-            Killmail.query.join(Character).join(Player).filter(Player.id == player_id)
-        )
+        # Get killmails from all player's characters using the relationship
+        query = Killmail.query.join(Character).filter(Character.player_id == player_id)
 
         # Add date filters if provided
         if start_date:
@@ -107,7 +106,7 @@ def search_player():
         if end_date:
             query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
 
-        kills = query.order_by(Killmail.killmail_time.desc()).all()
+        kills = query.order_by(Killmail.id.desc()).all()
 
     return render_template(
         "search_player.html",
@@ -133,15 +132,21 @@ def search_char():
 
     kills = []
     if character_id:
-        query = Killmail.query.filter(Killmail.character_id == character_id)
+        # Get character with killmails loaded
+        character = Character.query.options(db.joinedload(Character.killmails)).get(
+            character_id
+        )
+        if character:
+            # Filter killmails using the relationship
+            query = Killmail.query.filter(Killmail.character_id == character_id)
 
-        # Add date filters if provided
-        if start_date:
-            query = query.filter(Killmail.killmail_time >= start_date)
-        if end_date:
-            query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
+            # Add date filters if provided
+            if start_date:
+                query = query.filter(Killmail.killmail_time >= start_date)
+            if end_date:
+                query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
 
-        kills = query.order_by(Killmail.killmail_time.desc()).all()
+            kills = query.order_by(Killmail.id.desc()).all()
 
     return render_template(
         "search_char.html",

@@ -27,6 +27,7 @@ class Character(db.Model):
     title: Mapped[str] = mapped_column(nullable=True)
     player_id: Mapped[int] = mapped_column(db.ForeignKey("player.id"))
     player: Mapped["Player"] = db.relationship("Player", back_populates="characters")
+    killmails: Mapped[list["Killmail"]] = db.relationship("Killmail", back_populates="character")
 
     def updatePlayer(self, title: str = None) -> bool:
         """
