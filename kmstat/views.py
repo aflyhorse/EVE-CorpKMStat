@@ -133,7 +133,7 @@ def search_player():
 @app.route("/search-char")
 def search_char():
     # Get all characters for the dropdown
-    characters = Character.query.order_by(Character.name).all()
+    characters = Character.query.order_by(func.lower(Character.name)).all()
 
     # Get search parameters
     character_id = request.args.get("character", type=int)
