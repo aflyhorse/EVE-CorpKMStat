@@ -19,7 +19,7 @@ Player combination is based on in-game titles. The project *does not require CCP
 1. Copy and edit ```instance/config.ini```.
 1. Run ```flask initdb``` and ```flask updatesde``` to init database.
 1. Run ```flask parseall``` and monitor its output.
-3. Copy and edit ```scripts/kmstatdailyup.sh``` to ```/etc/cron.daily/```.
+3. Copy and edit ```scripts/kmstatdailyup``` to ```/etc/cron.daily/```.
 
 ### After major update of Tranquility
 
