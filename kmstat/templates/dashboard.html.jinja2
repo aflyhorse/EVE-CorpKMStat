@@ -31,7 +31,7 @@
                             {% set percentage = (player.total_value / year_stats[0][1].total_value * 100) if year_stats|length > 0 else 0 %}
                             {% set colors = ['#ff9999', '#99ff99', '#99ccff', '#ffcc99', '#ff99cc', '#99ffcc'] %}
                             {% set color = colors[loop.index0 % colors|length] %}
-                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
+                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id, start_date=selected_year|string + '-01-01', end_date=selected_year|string + '-12-31') }}'">
                                 <td>{{ rank }}</td>
                                 <td>
                                     {% set name, text_color = player.name|detect_color %}
@@ -90,7 +90,7 @@
                             {% set percentage = (player.total_value / month_stats[0][1].total_value * 100) if month_stats|length > 0 else 0 %}
                             {% set colors = ['#ff9999', '#99ff99', '#99ccff', '#ffcc99', '#ff99cc', '#99ffcc'] %}
                             {% set color = colors[loop.index0 % colors|length] %}
-                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id) }}'">
+                            <tr class="clickable-row" onclick="window.location='{{ url_for('search_player', player_id=player.player_id, start_date=selected_year|string + '-' + '%02d'|format(selected_month) + '-01', end_date=selected_year|string + '-' + '%02d'|format(selected_month) + '-31') }}'">
                                 <td>{{ rank }}</td>
                                 <td>
                                     {% set name, text_color = player.name|detect_color %}
