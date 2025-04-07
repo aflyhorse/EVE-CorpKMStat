@@ -6,6 +6,7 @@ import os
 import pytz
 from configparser import ConfigParser
 from datetime import datetime
+from kmstat.models import SystemState
 
 
 class Config:
@@ -17,7 +18,9 @@ class Config:
 
         self.hoster = self.config.get("DEFAULT", "hoster")
         self.corporation_id = self.config.getint("DEFAULT", "corporation_id")
-        self.sitename = self.config.get("DEFAULT", "sitename", fallback="EVE Corp KM Stats")
+        self.sitename = self.config.get(
+            "DEFAULT", "sitename", fallback="EVE Corp KM Stats"
+        )
 
         from kmstat.api import api
 
@@ -45,38 +48,28 @@ class Config:
             self.config.get("DEFAULT", "startupdate"), "%Y-%m-%d"
         ).date()
 
-        latest = self.config.get("STATUS", "latest")
-        if latest:
-            self.latest = datetime.strptime(
-                latest,
-                "%Y-%m-%d",
-            ).date()
-        else:
-            self.latest = self.startupdate
+    @property
+    def sdeversion(self):
+        """Get the SDE version date from the database"""
+        sde_date = SystemState.get_sde_version()
+        if not sde_date:
+            # Default to 1970-01-01 if not set
+            sde_date = datetime.strptime("1970-01-01", "%Y-%m-%d").date()
+        return sde_date
 
-        sdeversion = self.config.get("STATUS", "sdeversion", fallback="1970-01-01")
-        if sdeversion:
-            self.sdeversion = datetime.strptime(
-                sdeversion,
-                "%Y-%m-%d",
-            ).date()
-        else:
-            self.sdeversion = datetime.strptime(
-                "1970-01-01",
-                "%Y-%m-%d",
-            ).date()
+    def set_sdeversion(self, version_date):
+        """Set the SDE version date in the database"""
+        SystemState.set_sde_version(version_date)
+
+    @property
+    def latest(self):
+        """Get the latest update date from the database"""
+        latest_date = SystemState.get_latest_update()
+        return latest_date if latest_date else self.startupdate
 
     def set_latest(self, latest: datetime):
-        self.latest = latest
-        self.config.set("STATUS", "latest", latest.strftime("%Y-%m-%d"))
-        with open(self.config_file, "w") as configfile:
-            self.config.write(configfile)
-
-    def set_sdeversion(self, sdeversion: datetime):
-        self.sdeversion = sdeversion
-        self.config.set("STATUS", "sdeversion", sdeversion.strftime("%Y-%m-%d"))
-        with open(self.config_file, "w") as configfile:
-            self.config.write(configfile)
+        """Set the latest update date in the database"""
+        SystemState.set_latest_update(latest)
 
 
 # Create a single instance to be used throughout the application

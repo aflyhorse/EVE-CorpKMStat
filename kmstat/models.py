@@ -98,3 +98,50 @@ class Killmail(db.Model):
     )
     victim_ship_type: Mapped["ItemType"] = db.relationship("ItemType")
     total_value: Mapped[float] = mapped_column(nullable=False)
+
+
+class SystemState(db.Model):
+    """Store system-wide state that needs to persist across application restarts."""
+
+    key = db.Column(db.String(20), primary_key=True)
+    date_value = db.Column(db.Date, nullable=True)
+
+    @classmethod
+    def get_latest_update(cls):
+        """Get the latest update date, or None if not set"""
+        from kmstat import app
+        with app.app_context():
+            state = cls.query.filter_by(key="latest_update").first()
+            return state.date_value if state else None
+
+    @classmethod
+    def set_latest_update(cls, date_value):
+        """Set the latest update date"""
+        from kmstat import app
+        with app.app_context():
+            state = cls.query.filter_by(key="latest_update").first()
+            if not state:
+                state = cls(key="latest_update")
+                db.session.add(state)
+            state.date_value = date_value
+            db.session.commit()
+
+    @classmethod
+    def get_sde_version(cls):
+        """Get the SDE version date, or None if not set"""
+        from kmstat import app
+        with app.app_context():
+            state = cls.query.filter_by(key="sde_version").first()
+            return state.date_value if state else None
+
+    @classmethod
+    def set_sde_version(cls, date_value):
+        """Set the SDE version date"""
+        from kmstat import app
+        with app.app_context():
+            state = cls.query.filter_by(key="sde_version").first()
+            if not state:
+                state = cls(key="sde_version")
+                db.session.add(state)
+            state.date_value = date_value
+            db.session.commit()
