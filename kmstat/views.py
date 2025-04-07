@@ -4,6 +4,7 @@ from sqlalchemy import func
 from kmstat import app, db
 from kmstat.models import Player, Character, Killmail
 from kmstat.config import config
+from kmstat.utils import get_last_day_of_month
 
 
 @app.route("/")
@@ -87,6 +88,24 @@ def search_player():
     player_id = request.args.get("player_id", type=int)
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
+
+    # Validate and fix end_date if it's invalid
+    if end_date:
+        try:
+            date_parts = end_date.split("-")
+            year = int(date_parts[0])
+            month = int(date_parts[1])
+            day = int(date_parts[2])
+
+            # Get the actual last day of the month
+            last_day = get_last_day_of_month(year, month)
+
+            # If the day is invalid, use the last day of the month
+            if day > last_day:
+                end_date = f"{year}-{month:02d}-{last_day:02d}"
+        except (ValueError, IndexError):
+            # If date parsing fails, don't modify the end_date
+            pass
 
     kills = []
     player_characters = []

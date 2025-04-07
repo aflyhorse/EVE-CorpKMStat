@@ -6,7 +6,8 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_bootstrap import Bootstrap5
-from kmstat.utils import detect_color
+from kmstat.utils import detect_color, get_last_day_of_month
+
 
 # Create Flask app first
 app = Flask(__name__)
@@ -22,7 +23,12 @@ migrate = Migrate(app, db)
 
 
 # Register Jinja2 filters
-app.jinja_env.filters['detect_color'] = detect_color
+def register_filters(app):
+    app.jinja_env.filters["detect_color"] = detect_color
+    app.jinja_env.globals["get_last_day_of_month"] = get_last_day_of_month
+
+
+register_filters(app)
 
 # Only expose db and app at module level
 __all__ = ["db", "app"]
