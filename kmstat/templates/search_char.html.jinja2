@@ -1,8 +1,19 @@
 {% extends "base.html.jinja2" %}
+{% from 'bootstrap5/utils.html' import render_icon %}
+
 {% block title %}按角色查询{% endblock %}
 
 {% block content %}
 <div class="container">
+    <style>
+        .sort-icon {
+            cursor: pointer;
+            margin-left: 5px;
+        }
+        .sort-icon:hover {
+            opacity: 0.7;
+        }
+    </style>
     <h2>按角色查询</h2>
     <div class="card mt-4">
         <div class="card-body">
@@ -43,30 +54,21 @@
                 <table class="table table-striped">
                     <thead>
                         <tr>
-                            <th>击杀ID</th>
+                            <th>击杀ID <span class="sort-icon" onclick="sortTable(0)">{{ render_icon('sort-down') }}</span></th>
                             <th>击杀时间</th>
-                            <th>所属玩家</th>
-                            <th>星系</th>
+                            <th>星系 <span class="sort-icon" onclick="sortTable(2)">{{ render_icon('sort-down') }}</span></th>
                             <th>击毁舰船</th>
-                            <th class="text-end">价值</th>
+                            <th class="text-end">价值 <span class="sort-icon" onclick="sortTable(4)">{{ render_icon('sort-down') }}</span></th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="killsTableBody">
                         {% for kill in kills %}
                         <tr>
                             <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id }}</a></td>
                             <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                            {% set name, color = kill.character.player.title|detect_color %}
-                            <td>
-                                {% if color %}
-                                    <span style="color: {{ color }}">{{ name }}</span>
-                                {% else %}
-                                    {{ name }}
-                                {% endif %}
-                            </td>
                             <td>{{ kill.solar_system.name }}</td>
                             <td>{{ kill.victim_ship_type.name }}</td>
-                            <td class="text-end">{{ "{:,.2f}".format(kill.total_value) }}</td>
+                            <td class="text-end" data-value="{{ kill.total_value }}">{{ "{:,.2f}".format(kill.total_value) }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -76,4 +78,44 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+let sortDirections = {};
+
+function sortTable(colIndex) {
+    const tbody = document.getElementById('killsTableBody');
+    const rows = Array.from(tbody.getElementsByTagName('tr'));
+    
+    // Toggle sort direction
+    sortDirections[colIndex] = !sortDirections[colIndex];
+    const direction = sortDirections[colIndex] ? 1 : -1;
+    
+    rows.sort((a, b) => {
+        let aValue, bValue;
+        
+        if (colIndex === 4) { // Price column
+            // Use the data-value attribute for sorting
+            aValue = parseFloat(a.cells[colIndex].getAttribute('data-value'));
+            bValue = parseFloat(b.cells[colIndex].getAttribute('data-value'));
+        } else {
+            aValue = a.cells[colIndex].textContent.trim();
+            bValue = b.cells[colIndex].textContent.trim();
+        }
+        
+        if (colIndex === 4) {
+            return direction * (aValue - bValue);
+        } else {
+            return direction * aValue.localeCompare(bValue);
+        }
+    });
+    
+    // Clear the table
+    while (tbody.firstChild) {
+        tbody.removeChild(tbody.firstChild);
+    }
+    
+    // Add sorted rows
+    rows.forEach(row => tbody.appendChild(row));
+}
+</script>
 {% endblock %}
