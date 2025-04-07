@@ -80,11 +80,18 @@
 </div>
 
 <script>
-let sortDirections = {};
+let sortDirections = {
+    4: true  // Initialize price column (index 4) to sort descending first
+};
 
 function sortTable(colIndex) {
     const tbody = document.getElementById('killsTableBody');
     const rows = Array.from(tbody.getElementsByTagName('tr'));
+    
+    // Initialize direction if not set
+    if (sortDirections[colIndex] === undefined) {
+        sortDirections[colIndex] = false;
+    }
     
     // Toggle sort direction
     sortDirections[colIndex] = !sortDirections[colIndex];
