@@ -2,8 +2,8 @@
 {% from 'bootstrap5/utils.html' import render_icon %}
 
 {% block head %}
-    {{ super() }}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
+{{ super() }}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 {% endblock %}
 {% block title %}按玩家查询{% endblock %}
 
@@ -15,50 +15,61 @@
             cursor: pointer;
             margin-left: 5px;
         }
+
         .sort-icon:hover {
             opacity: 0.7;
         }
     </style>
-    <div class="card mt-4">
-        <div class="card-body">
-            <form method="get" action="{{ url_for('search_player') }}">
-                <div class="mb-3">
-                    <label for="player" class="form-label">玩家名称</label>
-                    <input class="form-control" list="playerList" id="player" name="player" placeholder="双击或输入搜索玩家" value="{{ selected_player_name if selected_player_name }}">
-                    <datalist id="playerList">
-                        {% for player in players %}
-                            {% set name, color = player.title|detect_color %}
-                            <option value="{{ name }}" data-id="{{ player.id }}">
-                        {% endfor %}
-                    </datalist>
-                    <input type="hidden" name="player_id" id="player_id" value="{{ selected_player }}">
-                </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="start_date" class="form-label">开始日期</label>
-                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date if start_date }}">
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="end_date" class="form-label">结束日期</label>
-                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date if end_date }}">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">查询</button>
-            </form>
-        </div>
-    </div>
 
-    {% if selected_player %}
-    <div class="row">
-        <div class="col-md-4">
-            <div class="card mt-4">
+    <div class="row mt-4">
+        <!-- Search form takes 7 columns -->
+        <div class="col-md-7">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('search_player') }}">
+                        <div class="mb-3">
+                            <label for="player" class="form-label">玩家名称</label>
+                            <input class="form-control" list="playerList" id="player" name="player"
+                                placeholder="双击或输入搜索玩家" value="{{ selected_player_name if selected_player_name }}"
+                                autocomplete="off">
+                            <datalist id="playerList">
+                                {% for player in players %}
+                                {% set name, color = player.title|detect_color %}
+                                <option value="{{ name }}" data-id="{{ player.id }}">
+                                    {% endfor %}
+                            </datalist>
+                            <input type="hidden" name="player_id" id="player_id" value="{{ selected_player }}">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_date" class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="start_date" name="start_date"
+                                    value="{{ start_date if start_date }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_date" class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="end_date" name="end_date"
+                                    value="{{ end_date if end_date }}">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">查询</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        {% if selected_player %}
+        <!-- Character list takes 5 columns -->
+        <div class="col-md-5">
+            <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">所属角色</h5>
                 </div>
                 <div class="card-body">
                     <div class="list-group">
                         {% for character in player_characters %}
-                        <div class="list-group-item list-group-item-action clickable-row" onclick="window.location='{{ url_for('search_char', character=character.id) }}'">
+                        <div class="list-group-item list-group-item-action clickable-row"
+                            onclick="window.location='{{ url_for('search_char', character=character.id) }}'">
                             {{ character.name }}
                         </div>
                         {% endfor %}
@@ -66,8 +77,14 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-8">
-            <div class="card mt-4">
+        {% endif %}
+    </div>
+
+    {% if selected_player %}
+    <!-- Kill records span full width -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">击杀记录</h5>
                 </div>
@@ -76,23 +93,28 @@
                         <table class="table table-striped">
                             <thead>
                                 <tr>
-                                    <th>击杀ID <span class="sort-icon" onclick="sortTable(0)">{{ render_icon('sort-down') }}</span></th>
+                                    <th>击杀ID <span class="sort-icon" onclick="sortTable(0)">{{ render_icon('sort-down')
+                                            }}</span></th>
                                     <th>击杀时间</th>
                                     <th>角色名称</th>
-                                    <th>星系 <span class="sort-icon" onclick="sortTable(3)">{{ render_icon('sort-down') }}</span></th>
+                                    <th>星系 <span class="sort-icon" onclick="sortTable(3)">{{ render_icon('sort-down')
+                                            }}</span></th>
                                     <th>击毁舰船</th>
-                                    <th class="text-end">价值 <span class="sort-icon" onclick="sortTable(5)">{{ render_icon('sort-down') }}</span></th>
+                                    <th class="text-end">价值 <span class="sort-icon" onclick="sortTable(5)">{{
+                                            render_icon('sort-down') }}</span></th>
                                 </tr>
                             </thead>
                             <tbody id="killsTableBody">
                                 {% for kill in kills %}
                                 <tr>
-                                    <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id }}</a></td>
+                                    <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id
+                                            }}</a></td>
                                     <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>{{ kill.character.name }}</td>
                                     <td>{{ kill.solar_system.name }}</td>
                                     <td>{{ kill.victim_ship_type.name }}</td>
-                                    <td class="text-end" data-value="{{ kill.total_value }}">{{ "{:,.2f}".format(kill.total_value) }}</td>
+                                    <td class="text-end" data-value="{{ kill.total_value }}">{{
+                                        "{:,.2f}".format(kill.total_value) }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -106,63 +128,63 @@
 </div>
 
 <script>
-document.getElementById('player').addEventListener('input', function(e) {
-    const datalist = document.getElementById('playerList');
-    const hiddenInput = document.getElementById('player_id');
-    const options = datalist.getElementsByTagName('option');
-    
-    for(let option of options) {
-        if(option.value === this.value) {
-            hiddenInput.value = option.dataset.id;
-            return;
-        }
-    }
-    hiddenInput.value = '';
-});
+    document.getElementById('player').addEventListener('input', function (e) {
+        const datalist = document.getElementById('playerList');
+        const hiddenInput = document.getElementById('player_id');
+        const options = datalist.getElementsByTagName('option');
 
-let sortDirections = {
-    5: true  // Initialize price column (index 5) to sort descending first
-};
-
-function sortTable(colIndex) {
-    const tbody = document.getElementById('killsTableBody');
-    const rows = Array.from(tbody.getElementsByTagName('tr'));
-    
-    // Initialize direction if not set
-    if (sortDirections[colIndex] === undefined) {
-        sortDirections[colIndex] = false;
-    }
-    
-    // Toggle sort direction
-    sortDirections[colIndex] = !sortDirections[colIndex];
-    const direction = sortDirections[colIndex] ? 1 : -1;
-    
-    rows.sort((a, b) => {
-        let aValue, bValue;
-        
-        if (colIndex === 5) { // Price column
-            // Use the data-value attribute for sorting
-            aValue = parseFloat(a.cells[colIndex].getAttribute('data-value'));
-            bValue = parseFloat(b.cells[colIndex].getAttribute('data-value'));
-        } else {
-            aValue = a.cells[colIndex].textContent.trim();
-            bValue = b.cells[colIndex].textContent.trim();
+        for (let option of options) {
+            if (option.value === this.value) {
+                hiddenInput.value = option.dataset.id;
+                return;
+            }
         }
-        
-        if (colIndex === 5) {
-            return direction * (aValue - bValue);
-        } else {
-            return direction * aValue.localeCompare(bValue);
-        }
+        hiddenInput.value = '';
     });
-    
-    // Clear the table
-    while (tbody.firstChild) {
-        tbody.removeChild(tbody.firstChild);
+
+    let sortDirections = {
+        5: true  // Initialize price column (index 5) to sort descending first
+    };
+
+    function sortTable(colIndex) {
+        const tbody = document.getElementById('killsTableBody');
+        const rows = Array.from(tbody.getElementsByTagName('tr'));
+
+        // Initialize direction if not set
+        if (sortDirections[colIndex] === undefined) {
+            sortDirections[colIndex] = false;
+        }
+
+        // Toggle sort direction
+        sortDirections[colIndex] = !sortDirections[colIndex];
+        const direction = sortDirections[colIndex] ? 1 : -1;
+
+        rows.sort((a, b) => {
+            let aValue, bValue;
+
+            if (colIndex === 5) { // Price column
+                // Use the data-value attribute for sorting
+                aValue = parseFloat(a.cells[colIndex].getAttribute('data-value'));
+                bValue = parseFloat(b.cells[colIndex].getAttribute('data-value'));
+            } else {
+                aValue = a.cells[colIndex].textContent.trim();
+                bValue = b.cells[colIndex].textContent.trim();
+            }
+
+            if (colIndex === 5) {
+                return direction * (aValue - bValue);
+            } else {
+                return direction * aValue.localeCompare(bValue);
+            }
+        });
+
+        // Clear the table
+        while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
+        }
+
+        // Add sorted rows
+        rows.forEach(row => tbody.appendChild(row));
     }
-    
-    // Add sorted rows
-    rows.forEach(row => tbody.appendChild(row));
-}
 </script>
 {% endblock %}

@@ -10,69 +10,113 @@
             cursor: pointer;
             margin-left: 5px;
         }
+
         .sort-icon:hover {
             opacity: 0.7;
         }
     </style>
     <h2>按角色查询</h2>
-    <div class="card mt-4">
-        <div class="card-body">
-            <form method="get" action="{{ url_for('search_char') }}">
-                <div class="mb-3">
-                    <label for="character" class="form-label">角色名称</label>
-                    <select class="form-select" id="character" name="character">
-                        <option value="">请选择角色...</option>
-                        {% for character in characters %}
-                            <option value="{{ character.id }}" {% if character.id == selected_character %}selected{% endif %}>
-                                {{ character.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+
+    <div class="row mt-4">
+        <!-- Search form takes 7 columns -->
+        <div class="col-md-7">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" action="{{ url_for('search_char') }}">
+                        <div class="mb-3">
+                            <label for="character" class="form-label">角色名称</label>
+                            <select class="form-select" id="character" name="character">
+                                <option value="">请选择角色...</option>
+                                {% for character in characters %}
+                                <option value="{{ character.id }}" {% if character.id==selected_character %}selected{%
+                                    endif %}>
+                                    {{ character.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="start_date" class="form-label">开始日期</label>
+                                <input type="date" class="form-control" id="start_date" name="start_date"
+                                    value="{{ start_date if start_date }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="end_date" class="form-label">结束日期</label>
+                                <input type="date" class="form-control" id="end_date" name="end_date"
+                                    value="{{ end_date if end_date }}">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">查询</button>
+                    </form>
                 </div>
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label for="start_date" class="form-label">开始日期</label>
-                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date if start_date }}">
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="end_date" class="form-label">结束日期</label>
-                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date if end_date }}">
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-primary">查询</button>
-            </form>
+            </div>
         </div>
+
+        {% if character_obj and character_obj.player %}
+        <!-- Associated Player card takes 5 columns -->
+        <div class="col-md-5">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">关联玩家</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <div class="list-group-item list-group-item-action clickable-row"
+                            onclick="window.location='{{ url_for('search_player', player_id=character_obj.player_id) }}'">
+                            {% set name, color = character_obj.player.title|detect_color %}
+                            {% if color %}
+                            <span style="color: {{ color }}">{{ name }}</span>
+                            {% else %}
+                            {{ character_obj.player.title }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {% if selected_character %}
-    <div class="card mt-4">
-        <div class="card-header">
-            <h5 class="mb-0">击杀记录</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>击杀ID <span class="sort-icon" onclick="sortTable(0)">{{ render_icon('sort-down') }}</span></th>
-                            <th>击杀时间</th>
-                            <th>星系 <span class="sort-icon" onclick="sortTable(2)">{{ render_icon('sort-down') }}</span></th>
-                            <th>击毁舰船</th>
-                            <th class="text-end">价值 <span class="sort-icon" onclick="sortTable(4)">{{ render_icon('sort-down') }}</span></th>
-                        </tr>
-                    </thead>
-                    <tbody id="killsTableBody">
-                        {% for kill in kills %}
-                        <tr>
-                            <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id }}</a></td>
-                            <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                            <td>{{ kill.solar_system.name }}</td>
-                            <td>{{ kill.victim_ship_type.name }}</td>
-                            <td class="text-end" data-value="{{ kill.total_value }}">{{ "{:,.2f}".format(kill.total_value) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <!-- Kill records span full width -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">击杀记录</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>击杀ID <span class="sort-icon" onclick="sortTable(0)">{{ render_icon('sort-down')
+                                            }}</span></th>
+                                    <th>击杀时间</th>
+                                    <th>星系 <span class="sort-icon" onclick="sortTable(2)">{{ render_icon('sort-down')
+                                            }}</span></th>
+                                    <th>击毁舰船</th>
+                                    <th class="text-end">价值 <span class="sort-icon" onclick="sortTable(4)">{{
+                                            render_icon('sort-down') }}</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="killsTableBody">
+                                {% for kill in kills %}
+                                <tr>
+                                    <td><a href="https://zkillboard.com/kill/{{ kill.id }}/" target="_blank">{{ kill.id
+                                            }}</a></td>
+                                    <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                    <td>{{ kill.solar_system.name }}</td>
+                                    <td>{{ kill.victim_ship_type.name }}</td>
+                                    <td class="text-end" data-value="{{ kill.total_value }}">{{
+                                        "{:,.2f}".format(kill.total_value) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -80,49 +124,49 @@
 </div>
 
 <script>
-let sortDirections = {
-    4: true  // Initialize price column (index 4) to sort descending first
-};
+    let sortDirections = {
+        4: true  // Initialize price column (index 4) to sort descending first
+    };
 
-function sortTable(colIndex) {
-    const tbody = document.getElementById('killsTableBody');
-    const rows = Array.from(tbody.getElementsByTagName('tr'));
-    
-    // Initialize direction if not set
-    if (sortDirections[colIndex] === undefined) {
-        sortDirections[colIndex] = false;
-    }
-    
-    // Toggle sort direction
-    sortDirections[colIndex] = !sortDirections[colIndex];
-    const direction = sortDirections[colIndex] ? 1 : -1;
-    
-    rows.sort((a, b) => {
-        let aValue, bValue;
-        
-        if (colIndex === 4) { // Price column
-            // Use the data-value attribute for sorting
-            aValue = parseFloat(a.cells[colIndex].getAttribute('data-value'));
-            bValue = parseFloat(b.cells[colIndex].getAttribute('data-value'));
-        } else {
-            aValue = a.cells[colIndex].textContent.trim();
-            bValue = b.cells[colIndex].textContent.trim();
+    function sortTable(colIndex) {
+        const tbody = document.getElementById('killsTableBody');
+        const rows = Array.from(tbody.getElementsByTagName('tr'));
+
+        // Initialize direction if not set
+        if (sortDirections[colIndex] === undefined) {
+            sortDirections[colIndex] = false;
         }
-        
-        if (colIndex === 4) {
-            return direction * (aValue - bValue);
-        } else {
-            return direction * aValue.localeCompare(bValue);
+
+        // Toggle sort direction
+        sortDirections[colIndex] = !sortDirections[colIndex];
+        const direction = sortDirections[colIndex] ? 1 : -1;
+
+        rows.sort((a, b) => {
+            let aValue, bValue;
+
+            if (colIndex === 4) { // Price column
+                // Use the data-value attribute for sorting
+                aValue = parseFloat(a.cells[colIndex].getAttribute('data-value'));
+                bValue = parseFloat(b.cells[colIndex].getAttribute('data-value'));
+            } else {
+                aValue = a.cells[colIndex].textContent.trim();
+                bValue = b.cells[colIndex].textContent.trim();
+            }
+
+            if (colIndex === 4) {
+                return direction * (aValue - bValue);
+            } else {
+                return direction * aValue.localeCompare(bValue);
+            }
+        });
+
+        // Clear the table
+        while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
         }
-    });
-    
-    // Clear the table
-    while (tbody.firstChild) {
-        tbody.removeChild(tbody.firstChild);
+
+        // Add sorted rows
+        rows.forEach(row => tbody.appendChild(row));
     }
-    
-    // Add sorted rows
-    rows.forEach(row => tbody.appendChild(row));
-}
 </script>
 {% endblock %}

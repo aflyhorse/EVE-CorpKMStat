@@ -81,8 +81,14 @@ def dashboard():
 
 @app.route("/search-player")
 def search_player():
-    # Get all players for the dropdown
-    players = Player.query.order_by(Player.title).all()
+    # Get all players with at least one character for the dropdown
+    players = (
+        Player.query.join(Character)
+        .group_by(Player.id)
+        .having(func.count(Character.id) > 0)
+        .order_by(Player.title)
+        .all()
+    )
 
     # Get search parameters
     player_id = request.args.get("player_id", type=int)
@@ -160,12 +166,13 @@ def search_char():
     end_date = request.args.get("end_date")
 
     kills = []
+    selected_character = None
     if character_id:
         # Get character with killmails loaded
-        character = Character.query.options(db.joinedload(Character.killmails)).get(
-            character_id
-        )
-        if character:
+        selected_character = Character.query.options(
+            db.joinedload(Character.killmails)
+        ).get(character_id)
+        if selected_character:
             # Filter killmails using the relationship
             query = Killmail.query.filter(Killmail.character_id == character_id)
 
@@ -181,6 +188,7 @@ def search_char():
         "search_char.html.jinja2",
         characters=characters,
         selected_character=character_id,
+        character_obj=selected_character,  # Pass the character object to the template
         start_date=start_date,
         end_date=end_date,
         kills=kills,
