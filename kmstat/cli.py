@@ -19,6 +19,8 @@ from kmstat.models import SolarSystem, ItemType, Player, Character, Killmail
 from kmstat.api import api
 from kmstat.config import config
 
+nan_player_name = "__查无此人__"
+
 
 @app.cli.command()
 @click.option("--drop", is_flag=True, help="Create after drop.")
@@ -30,7 +32,7 @@ def initdb(drop):
     if drop:
         db.drop_all()
     db.create_all()
-    nan_player = Player(title="__查无此人__")
+    nan_player = Player(title=nan_player_name)
     db.session.add(nan_player)
     db.session.commit()
     click.echo("Initialized database.")
@@ -282,8 +284,8 @@ def parseall(start, end):
 @click.option(
     "--char", required=True, help="Character Name to update. (remember to use quotes)"
 )
-@click.option("--title", required=True, help="Title to update.")
-def updateplayer(char, title):
+@click.option("--title", help="Title to update.")
+def updateplayer(char: str, title=nan_player_name):
     """
     Update the player for a character based on title.
     First updates the character's title, then associates with a player.
