@@ -122,12 +122,18 @@ class API:
             )
 
             # Try to get the corporation join date
-            join_date = self.get_character_corp_join_date(character_id, config.corporation_id)
+            join_date = self.get_character_corp_join_date(
+                character_id, config.corporation_id
+            )
             if join_date:
                 character.joindate = join_date
-                logging.info(f"Set join date for new character {character.name}: {join_date}")
+                logging.info(
+                    f"Set join date for new character {character.name}: {join_date}"
+                )
             else:
-                logging.warning(f"Could not get join date for new character {character.name}")
+                logging.warning(
+                    f"Could not get join date for new character {character.name}"
+                )
 
             return character
         return None

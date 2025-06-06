@@ -11,9 +11,7 @@ import click
 class Player(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(nullable=False, unique=True)
-    joindate: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    joindate: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
     characters: Mapped[list["Character"]] = db.relationship(
         "Character", back_populates="player", cascade="all, delete-orphan"
     )
@@ -28,9 +26,7 @@ class Character(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(nullable=True)
-    joindate: Mapped[DateTime] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    joindate: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
     player_id: Mapped[int] = mapped_column(db.ForeignKey("player.id"))
     player: Mapped["Player"] = db.relationship("Player", back_populates="characters")
     killmails: Mapped[list["Killmail"]] = db.relationship(
@@ -90,9 +86,7 @@ class Character(db.Model):
         Update the player's join date to be the earliest among all associated characters.
         """
         # Get all characters for this player that have join dates
-        characters_with_dates = [
-            c for c in player.characters if c.joindate is not None
-        ]
+        characters_with_dates = [c for c in player.characters if c.joindate is not None]
 
         # Add the current character if it has a join date and isn't already in the list
         if self.joindate and self not in characters_with_dates:
@@ -103,7 +97,9 @@ class Character(db.Model):
             earliest_date = min(c.joindate for c in characters_with_dates)
             if player.joindate is None or earliest_date < player.joindate:
                 player.joindate = earliest_date
-                click.echo(f"Info: Updated player {player.title} join date to {earliest_date}")
+                click.echo(
+                    f"Info: Updated player {player.title} join date to {earliest_date}"
+                )
 
 
 class SolarSystem(db.Model):
