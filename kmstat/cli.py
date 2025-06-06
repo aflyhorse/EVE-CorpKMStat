@@ -505,6 +505,57 @@ def updatejoindate():
         click.echo(f"Error: Error updating join dates: {e}")
 
 
+@app.cli.command()
+def updatemainchar():
+    """
+    Update main character for all players.
+    Sets the main character to the one with the earliest join date.
+    If no characters have join dates, uses the first character.
+    """
+    try:
+        players = Player.query.all()
+        updated_players = 0
+
+        click.echo(f"Info: Processing {len(players)} players...")
+
+        for player in players:
+            # Skip the default "__查无此人__" player
+            if player.title == nan_player_name:
+                continue
+
+            # Skip players with no characters
+            if not player.characters:
+                click.echo(f"Warning: Player {player.title} has no characters")
+                continue
+
+            old_main = player.mainchar.name if player.mainchar else "None"
+
+            # Update main character using the model method
+            player.update_main_character()
+
+            new_main = player.mainchar.name if player.mainchar else "None"
+
+            if old_main != new_main:
+                db.session.add(player)
+                updated_players += 1
+                click.echo(
+                    f"Info: Updated main character for {player.title}: {old_main} -> {new_main}"
+                )
+            else:
+                click.echo(
+                    f"Info: Main character for {player.title} unchanged: {new_main}"
+                )
+
+        # Commit updates
+        db.session.commit()
+        click.echo(f"Info: Updated main character for {updated_players} players")
+        click.echo("Info: Main character update completed successfully")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Error updating main characters: {e}")
+
+
 @app.cli.group()
 def user():
     """User management commands."""

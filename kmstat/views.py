@@ -84,7 +84,7 @@ def dashboard():
 def search_player():
     # Get all players with at least one character for the dropdown
     players = (
-        Player.query.join(Character)
+        Player.query.join(Character, Player.id == Character.player_id)
         .group_by(Player.id)
         .having(func.count(Character.id) > 0)
         .order_by(Player.title)
@@ -290,3 +290,29 @@ def associate_character(character_id):
     return render_template(
         "associate_character.html.jinja2", character=character, players=players
     )
+
+
+@app.route("/set-main-character/<int:character_id>", methods=["POST"])
+@login_required
+def set_main_character(character_id):
+    """Set a character as the main character for their player."""
+    try:
+        character = Character.query.get_or_404(character_id)
+
+        if not character.player:
+            return jsonify({"success": False, "message": "角色未关联到任何玩家"})
+
+        # Update the player's main character
+        character.player.mainchar = character
+        db.session.commit()
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f"已将 {character.name} 设为 {character.player.title} 的主角色",
+            }
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": f"设置失败: {str(e)}"})

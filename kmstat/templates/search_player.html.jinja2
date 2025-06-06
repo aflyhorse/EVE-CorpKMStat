@@ -18,6 +18,14 @@
         .sort-icon:hover {
             opacity: 0.7;
         }
+
+        .clickable-row {
+            cursor: pointer;
+        }
+
+        .clickable-row:hover {
+            background-color: rgba(0, 0, 0, 0.04);
+        }
     </style>
 
     <div class="row mt-4">
@@ -67,9 +75,20 @@
                 <div class="card-body">
                     <div class="list-group">
                         {% for character in player_characters %}
-                        <div class="list-group-item list-group-item-action clickable-row"
-                            onclick="window.location='{{ url_for('search_char', character=character.id) }}'">
-                            {{ character.name }}
+                        <div class="list-group-item d-flex justify-content-between align-items-center {% if selected_player_obj.mainchar and character.id == selected_player_obj.mainchar.id %}list-group-item-warning{% endif %}">
+                            <span class="clickable-row flex-grow-1" onclick="window.location='{{ url_for('search_char', character=character.id) }}'">
+                                {{ character.name }}
+                                {% if selected_player_obj.mainchar and character.id == selected_player_obj.mainchar.id %}
+                                <span class="badge bg-warning text-dark ms-2">主角色</span>
+                                {% endif %}
+                            </span>
+                            {% if current_user.is_authenticated %}
+                            <button class="btn btn-sm btn-outline-primary ms-2" 
+                                    onclick="setMainCharacter({{ character.id }}, '{{ character.name }}')"
+                                    {% if selected_player_obj.mainchar and character.id == selected_player_obj.mainchar.id %}disabled{% endif %}>
+                                设为主角色
+                            </button>
+                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -196,6 +215,32 @@
 
         // Add sorted rows
         rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function setMainCharacter(characterId, characterName) {
+        if (!confirm(`确定要将 ${characterName} 设为主角色吗？`)) {
+            return;
+        }
+
+        fetch(`/set-main-character/${characterId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Reload the page to show the updated main character
+                location.reload();
+            } else {
+                alert(`错误：${data.message}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('设置主角色时发生错误');
+        });
     }
 </script>
 {% endblock %}

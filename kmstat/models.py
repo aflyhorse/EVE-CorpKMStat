@@ -31,14 +31,43 @@ class Player(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(nullable=False, unique=True)
     joindate: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
+    mainchar_id: Mapped[int] = mapped_column(
+        db.ForeignKey("character.id"), nullable=True
+    )
+    mainchar: Mapped["Character"] = db.relationship(
+        "Character", foreign_keys=[mainchar_id], post_update=True
+    )
     characters: Mapped[list["Character"]] = db.relationship(
-        "Character", back_populates="player", cascade="all, delete-orphan"
+        "Character",
+        back_populates="player",
+        cascade="all, delete-orphan",
+        foreign_keys="Character.player_id",
     )
 
     @classmethod
     def find_by_title(cls, title: str) -> "Player":
         """Find a player by title, return None if not found"""
         return cls.query.filter_by(title=title).first()
+
+    def update_main_character(self):
+        """
+        Update the main character to be the one with the earliest join date.
+        If no characters have join dates, use the first character.
+        """
+        if not self.characters:
+            self.mainchar = None
+            return
+
+        # Get characters with join dates, sorted by join date
+        chars_with_dates = [c for c in self.characters if c.joindate is not None]
+
+        if chars_with_dates:
+            # Sort by join date and take the earliest
+            chars_with_dates.sort(key=lambda c: c.joindate)
+            self.mainchar = chars_with_dates[0]
+        else:
+            # No join dates available, use the first character
+            self.mainchar = self.characters[0]
 
 
 class Character(db.Model):
@@ -47,7 +76,9 @@ class Character(db.Model):
     title: Mapped[str] = mapped_column(nullable=True)
     joindate: Mapped[DateTime] = mapped_column(DateTime(timezone=True), nullable=True)
     player_id: Mapped[int] = mapped_column(db.ForeignKey("player.id"))
-    player: Mapped["Player"] = db.relationship("Player", back_populates="characters")
+    player: Mapped["Player"] = db.relationship(
+        "Player", back_populates="characters", foreign_keys=[player_id]
+    )
     killmails: Mapped[list["Killmail"]] = db.relationship(
         "Killmail", back_populates="character"
     )
@@ -80,6 +111,10 @@ class Character(db.Model):
                 if self.joindate:
                     player.joindate = self.joindate
                 db.session.add(player)
+                db.session.flush()  # Ensure player has an ID
+
+                # Set this character as the main character for the new player
+                player.mainchar = self
                 click.echo(f"Info: Created new player {player.title}")
 
             # Ensure character is in session
@@ -91,6 +126,9 @@ class Character(db.Model):
 
             # Update player join date to earliest among all associated characters
             self._update_player_join_date(player)
+
+            # Update main character if this character has an earlier join date
+            self._update_main_character(player)
 
             db.session.commit()
             return True
@@ -119,6 +157,28 @@ class Character(db.Model):
                 click.echo(
                     f"Info: Updated player {player.title} join date to {earliest_date}"
                 )
+
+    def _update_main_character(self, player):
+        """
+        Update the main character for the player.
+        If no main character is set, or if this character has an earlier join date,
+        set this character as the main character.
+        """
+        if player.mainchar is None:
+            player.mainchar = self
+            click.echo(f"Info: Set {self.name} as main character for {player.title}")
+        elif self.joindate and player.mainchar.joindate:
+            if self.joindate < player.mainchar.joindate:
+                player.mainchar = self
+                click.echo(
+                    f"Info: Updated main character for {player.title} to {self.name} (earlier join date)"
+                )
+        elif self.joindate and not player.mainchar.joindate:
+            # Current character has join date but main character doesn't
+            player.mainchar = self
+            click.echo(
+                f"Info: Updated main character for {player.title} to {self.name} (has join date)"
+            )
 
 
 class SolarSystem(db.Model):
