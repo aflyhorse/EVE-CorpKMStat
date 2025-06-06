@@ -8,6 +8,7 @@ from threading import Lock
 from functools import wraps
 import logging
 from typing import Optional
+from datetime import datetime
 
 
 def retry_with_backoff(max_retries=3, initial_delay=1):
@@ -26,7 +27,9 @@ def retry_with_backoff(max_retries=3, initial_delay=1):
                         time.sleep(delay)
                         delay *= 2  # Exponential backoff
 
-            logging.error(f"Error: Failed after {max_retries} retries: {last_exception}")
+            logging.error(
+                f"Error: Failed after {max_retries} retries: {last_exception}"
+            )
             return None  # Return None after all retries are exhausted
 
         return wrapper
@@ -138,6 +141,114 @@ class API:
             raise ValueError(f"No value found for killmail {killmail_id}")
 
         return float(value)  # Convert to float to ensure we don't return None
+
+    @retry_with_backoff()
+    def get_character_id_by_name(self, character_name: str) -> Optional[int]:
+        """
+        Get character ID from character name using EVE Online ESI Universe IDs endpoint.
+
+        Args:
+            character_name (str): The name of the character to search for
+
+        Returns:
+            Optional[int]: The character ID if found and verified as a character, None otherwise
+        """
+        url = f"{self.ESI_ENDPOINT}/universe/ids/?datasource=tranquility"
+
+        # The API expects a list of names to search for
+        payload = {"names": [character_name]}
+
+        response = self._make_request("POST", url, json=payload)
+        if response.status_code != 200:
+            logging.warning(
+                f"Failed to get character ID for '{character_name}', status code: {response.status_code}"
+            )
+            return None
+
+        data = response.json()
+        if not isinstance(data, dict):
+            logging.warning(
+                f"Invalid response format for character name '{character_name}'"
+            )
+            return None
+
+        # Check if we have characters in the response
+        characters = data.get("characters", [])
+        if not characters:
+            logging.warning(f"No character found for name '{character_name}'")
+            return None
+
+        # The API returns a list of character objects, we take the first one
+        character = characters[0]
+
+        return character.get("id")
+
+    @retry_with_backoff()
+    def get_character_corp_join_date(
+        self, character_id: int, corporation_id: int
+    ) -> Optional[datetime]:
+        """
+        Get the date when a character first joined a specific corporation using ESI Corporation History endpoint.
+
+        Args:
+            character_id (int): The character ID to get corporation history for
+            corporation_id (int): The corporation ID to find the join date for
+
+        Returns:
+            Optional[datetime]: The datetime when the character first joined the corporation in local timezone,
+                              None if not found
+        """
+        url = f"{self.ESI_ENDPOINT}/characters/{character_id}/corporationhistory/?datasource=tranquility"
+
+        response = self._make_request("GET", url)
+        if response.status_code != 200:
+            logging.warning(
+                f"Failed to get corporation history for character {character_id}, status code: {response.status_code}"
+            )
+            return None
+
+        data = response.json()
+        if not isinstance(data, list):
+            logging.warning(
+                f"Invalid response format for character {character_id} corporation history"
+            )
+            return None
+
+        # Find the first occurrence of the character joining the specified corporation
+        # Corporation history is ordered by record_id (chronological order)
+        for record in data:
+            if record.get("corporation_id") == corporation_id:
+                start_date = record.get("start_date")
+                if start_date:
+                    try:
+                        # Parse the UTC datetime string (format: "2022-05-28T15:09:00Z")
+                        utc_datetime = datetime.fromisoformat(
+                            start_date.replace("Z", "+00:00")
+                        )
+
+                        # Get local timezone from config
+                        from kmstat.config import config
+
+                        local_datetime = utc_datetime.astimezone(config.localtz)
+
+                        logging.info(
+                            f"Character {character_id} first joined corporation {corporation_id} "
+                            f"on {local_datetime} ({config.localtz})"
+                        )
+                        return local_datetime
+                    except ValueError as e:
+                        logging.error(f"Failed to parse datetime '{start_date}': {e}")
+                        return None
+                else:
+                    logging.warning(
+                        f"Found corporation record but no start_date for character {character_id}"
+                    )
+                    return None
+
+        logging.info(
+            f"Character {character_id} has never been in corporation {corporation_id}"
+        )
+        return None
 
 
 # Create a single instance to be used throughout the application

@@ -5,12 +5,16 @@ Database models for the application.
 from kmstat import db
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime
+from datetime import datetime
 import click
 
 
 class Player(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(nullable=False, unique=True)
+    joindate: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=datetime.now
+    )
     characters: Mapped[list["Character"]] = db.relationship(
         "Character", back_populates="player", cascade="all, delete-orphan"
     )
@@ -25,6 +29,9 @@ class Character(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(nullable=True)
+    joindate: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=datetime.now
+    )
     player_id: Mapped[int] = mapped_column(db.ForeignKey("player.id"))
     player: Mapped["Player"] = db.relationship("Player", back_populates="characters")
     killmails: Mapped[list["Killmail"]] = db.relationship(
@@ -110,6 +117,7 @@ class SystemState(db.Model):
     def get_latest_update(cls):
         """Get the latest update date, or None if not set"""
         from kmstat import app
+
         with app.app_context():
             state = cls.query.filter_by(key="latest_update").first()
             return state.date_value if state else None
@@ -118,6 +126,7 @@ class SystemState(db.Model):
     def set_latest_update(cls, date_value):
         """Set the latest update date"""
         from kmstat import app
+
         with app.app_context():
             state = cls.query.filter_by(key="latest_update").first()
             if not state:
@@ -130,6 +139,7 @@ class SystemState(db.Model):
     def get_sde_version(cls):
         """Get the SDE version date, or None if not set"""
         from kmstat import app
+
         with app.app_context():
             state = cls.query.filter_by(key="sde_version").first()
             return state.date_value if state else None
@@ -138,6 +148,7 @@ class SystemState(db.Model):
     def set_sde_version(cls, date_value):
         """Set the SDE version date"""
         from kmstat import app
+
         with app.app_context():
             state = cls.query.filter_by(key="sde_version").first()
             if not state:

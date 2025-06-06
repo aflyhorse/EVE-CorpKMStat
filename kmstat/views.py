@@ -116,11 +116,12 @@ def search_player():
     kills = []
     player_characters = []
     selected_player_name = None
+    selected_player_obj = None
 
     if player_id:
-        selected_player = Player.query.get(player_id)
-        if selected_player:
-            selected_player_name = selected_player.title
+        selected_player_obj = Player.query.get(player_id)
+        if selected_player_obj:
+            selected_player_name = selected_player_obj.title
             # Get player's characters with killmails loaded
             player_characters = (
                 Character.query.options(db.joinedload(Character.killmails))
@@ -146,6 +147,7 @@ def search_player():
         "search_player.html.jinja2",
         players=players,
         selected_player=player_id,
+        selected_player_obj=selected_player_obj,
         selected_player_name=selected_player_name,
         start_date=start_date,
         end_date=end_date,

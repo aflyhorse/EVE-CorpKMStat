@@ -426,3 +426,78 @@ def updatesde():
 
     # Update the config to mark sde update date
     config.set_sdeversion(date.today())
+
+
+@app.cli.command()
+def updatejoindate():
+    """
+    Update join dates for all characters and players.
+    Fetches corporation join dates from ESI for all characters,
+    then updates player join dates to the earliest of their associated characters.
+    """
+    try:
+        characters = Character.query.all()
+        updated_characters = 0
+        failed_characters = 0
+
+        click.echo(f"Info: Processing {len(characters)} characters...")
+
+        for character in characters:
+            click.echo(
+                f"Info: Processing character {character.name} (ID: {character.id})"
+            )
+
+            # Get the character's corporation join date
+            join_date = api.get_character_corp_join_date(
+                character.id, config.corporation_id
+            )
+
+            if join_date:
+                character.joindate = join_date
+                db.session.add(character)
+                updated_characters += 1
+                click.echo(f"Info: Updated {character.name} join date to {join_date}")
+            else:
+                failed_characters += 1
+                click.echo(f"Warning: Could not get join date for {character.name}")
+
+        # Commit character updates
+        db.session.commit()
+        click.echo(
+            f"Info: Updated {updated_characters} characters, {failed_characters} failed"
+        )
+
+        # Now update player join dates
+        players = Player.query.all()
+        updated_players = 0
+
+        click.echo(f"Info: Processing {len(players)} players...")
+
+        for player in players:
+            # Skip the default "__查无此人__" player
+            if player.title == nan_player_name:
+                continue
+
+            # Get all characters for this player that have join dates
+            characters_with_dates = [
+                c for c in player.characters if c.joindate is not None
+            ]
+
+            if characters_with_dates:
+                # Find the earliest join date among all characters
+                earliest_date = min(c.joindate for c in characters_with_dates)
+                player.joindate = earliest_date
+                db.session.add(player)
+                updated_players += 1
+                click.echo(
+                    f"Info: Updated player {player.title} join date to {earliest_date}"
+                )
+
+        # Commit player updates
+        db.session.commit()
+        click.echo(f"Info: Updated {updated_players} players")
+        click.echo("Info: Join date update completed successfully")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Error updating join dates: {e}")
