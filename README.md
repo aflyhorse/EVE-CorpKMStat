@@ -29,6 +29,18 @@ Player combination is based on in-game titles. The project *does not require CCP
 
 * Manually combine or create player is made via ```flask updateplayer --char [character name] --title [existing or new title]```.
 * Use ```flask parseall --start [startdate] --end [enddate]``` to force update on given range.
+* Use ```flask updatejoindate``` to update join dates for all characters and players.
+
+### User Management
+
+The application includes user authentication for accessing administrative features:
+
+* Create a user: ```flask user add [username] --password [password]``` (if no password provided, random one will be generated)
+* Modify user password: ```flask user modify [username] --new-password [password]``` (if no password provided, random one will be generated)
+* Delete a user: ```flask user delete [username]```
+* List all users: ```flask user list```
+
+**Note**: Users can only change their own passwords via the web interface at `/change-password`. Registration is not available through the website - users must be created by administrators via CLI.
 
 
 ## About Me

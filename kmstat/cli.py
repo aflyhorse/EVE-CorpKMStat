@@ -13,9 +13,11 @@ import io
 import json
 import time
 import click
+import secrets
+import string
 
 from kmstat import app, db
-from kmstat.models import SolarSystem, ItemType, Player, Character, Killmail
+from kmstat.models import SolarSystem, ItemType, Player, Character, Killmail, User
 from kmstat.api import api
 from kmstat.config import config
 
@@ -501,3 +503,122 @@ def updatejoindate():
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error: Error updating join dates: {e}")
+
+
+@app.cli.group()
+def user():
+    """User management commands."""
+    pass
+
+
+@user.command()
+@click.argument("username")
+@click.option(
+    "--password",
+    help="Password for the user. If not provided, a random password will be generated.",
+)
+def add(username, password):
+    """Add a new user."""
+    try:
+        # Check if user already exists
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            click.echo(f"Error: User '{username}' already exists")
+            return
+
+        # Generate random password if not provided
+        if not password:
+            password = generate_random_password()
+            click.echo(f"Info: Generated random password: {password}")
+
+        # Create new user
+        new_user = User(username=username)
+        new_user.set_password(password)
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        click.echo(f"Success: User '{username}' created successfully")
+        if not click.get_text_stream(
+            "stdin"
+        ).isatty():  # If password was auto-generated
+            click.echo(f"Password: {password}")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Failed to create user: {str(e)}")
+
+
+@user.command()
+@click.argument("username")
+@click.option(
+    "--new-password",
+    help="New password for the user. If not provided, a random password will be generated.",
+)
+def modify(username, new_password):
+    """Modify an existing user's password."""
+    try:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            click.echo(f"Error: User '{username}' not found")
+            return
+
+        # Generate random password if not provided
+        if not new_password:
+            new_password = generate_random_password()
+            click.echo(f"Info: Generated random password: {new_password}")
+
+        user.set_password(new_password)
+        db.session.commit()
+
+        click.echo(f"Success: Password for user '{username}' updated successfully")
+        click.echo(f"New password: {new_password}")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Failed to modify user: {str(e)}")
+
+
+@user.command()
+@click.argument("username")
+@click.confirmation_option(prompt="Are you sure you want to delete this user?")
+def delete(username):
+    """Delete an existing user."""
+    try:
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            click.echo(f"Error: User '{username}' not found")
+            return
+
+        db.session.delete(user)
+        db.session.commit()
+
+        click.echo(f"Success: User '{username}' deleted successfully")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Failed to delete user: {str(e)}")
+
+
+@user.command()
+def list():
+    """List all users."""
+    try:
+        users = User.query.all()
+        if not users:
+            click.echo("No users found")
+            return
+
+        click.echo("Users:")
+        for user in users:
+            click.echo(f"  - {user.username} (ID: {user.id})")
+
+    except Exception as e:
+        click.echo(f"Error: Failed to list users: {str(e)}")
+
+
+def generate_random_password(length=12):
+    """Generate a random password with specified length."""
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = "".join(secrets.choice(alphabet) for _ in range(length))
+    return password

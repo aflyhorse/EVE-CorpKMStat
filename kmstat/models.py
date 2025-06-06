@@ -5,7 +5,26 @@ Database models for the application.
 from kmstat import db
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import DateTime
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 import click
+
+
+class User(UserMixin, db.Model):
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(nullable=False)
+
+    def set_password(self, password: str):
+        """Set password hash from plain text password."""
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password: str) -> bool:
+        """Check if provided password matches the hash."""
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f"<User {self.username}>"
 
 
 class Player(db.Model):
