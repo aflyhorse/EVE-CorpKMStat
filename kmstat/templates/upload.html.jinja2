@@ -1,0 +1,202 @@
+{% extends "base.html.jinja2" %}
+{% from 'bootstrap5/utils.html' import render_icon %}
+
+{% block title %}月度数据上传{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>月度数据上传</h2>
+    
+    <div class="row mt-4">
+        <!-- Upload form -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">上传新数据</h5>
+                </div>
+                <div class="card-body">
+                    <form id="uploadForm" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">Excel文件</label>
+                            <input type="file" class="form-control" id="file" name="file" 
+                                   accept=".xlsx,.xls" required>
+                            <div class="form-text">
+                                请上传包含PAP、赏金、挖矿三个工作表的Excel文件
+                                <br>
+                                <a href="{{ url_for('download_template') }}" class="btn btn-sm btn-outline-info mt-2">
+                                    {{ render_icon('download') }} 下载模板文件
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="year" class="form-label">年份</label>
+                                <input type="number" class="form-control" id="year" name="year" 
+                                       min="2020" max="2030" value="{{ default_year }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="month" class="form-label">月份</label>
+                                <select class="form-control" id="month" name="month" required>
+                                    <option value="">选择月份</option>
+                                    {% for i in range(1, 13) %}
+                                    <option value="{{ i }}" {% if i == default_month %}selected{% endif %}>
+                                        {{ i }}月
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="tax_rate" class="form-label">税率</label>
+                                <input type="number" class="form-control" id="tax_rate" name="tax_rate" 
+                                       step="0.01" min="0" max="1" value="{{ default_tax_rate }}" required>
+                                <div class="form-text">输入小数形式，如0.10表示10%</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="ore_convert_rate" class="form-label">矿石转换率</label>
+                                <input type="number" class="form-control" id="ore_convert_rate" name="ore_convert_rate" 
+                                       step="0.01" min="0" value="{{ default_ore_convert_rate }}" required>
+                                <div class="form-text">矿石价值转换率</div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary" id="uploadBtn">
+                            <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                            上传数据
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Existing uploads -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">已上传数据</h5>
+                </div>
+                <div class="card-body">
+                    {% if uploads %}
+                    <div class="list-group">
+                        {% for upload in uploads %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ upload.year }}-{{ "%02d"|format(upload.month) }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    {{ upload.upload_date.strftime('%Y-%m-%d %H:%M') }} 
+                                    by {{ upload.uploaded_by.username }}
+                                </small>
+                                <br>
+                                <small class="text-info">
+                                    税率: {{ "%.1f"|format(upload.tax_rate * 100) }}% | 
+                                    矿石转换率: {{ "%.2f"|format(upload.ore_convert_rate) }}
+                                </small>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{{ url_for('view_upload_summary', year=upload.year, month=upload.month) }}" 
+                                   class="btn btn-sm btn-outline-info">详情</a>
+                                <button class="btn btn-sm btn-outline-danger" 
+                                        onclick="deleteUpload({{ upload.year }}, {{ upload.month }})">
+                                    删除
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">暂无上传数据</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const year = formData.get('year');
+    const month = formData.get('month');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadSpinner = document.getElementById('uploadSpinner');
+    
+    // Check if data already exists for this year/month
+    fetch(`/upload/check-exists/${year}/${month}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.exists) {
+            // Ask for confirmation to overwrite
+            if (confirm(`${year}-${month.padStart(2, '0')} 的数据已存在。确定要覆盖现有数据吗？\n\n警告：此操作将删除该月份的所有现有数据并用新数据替换。`)) {
+                formData.append('overwrite', 'true');
+                performUpload(formData, uploadBtn, uploadSpinner);
+            }
+        } else {
+            performUpload(formData, uploadBtn, uploadSpinner);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking existing data:', error);
+        // If check fails, proceed with upload anyway
+        performUpload(formData, uploadBtn, uploadSpinner);
+    });
+});
+
+function performUpload(formData, uploadBtn, uploadSpinner) {
+    // Show loading state
+    uploadBtn.disabled = true;
+    uploadSpinner.classList.remove('d-none');
+    
+    fetch('/upload', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('上传成功！\\n' + data.message);
+            location.reload();
+        } else {
+            alert('上传失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('上传时发生错误');
+    })
+    .finally(() => {
+        // Hide loading state
+        uploadBtn.disabled = false;
+        uploadSpinner.classList.add('d-none');
+    });
+}
+
+function deleteUpload(year, month) {
+    if (!confirm(`确定要删除 ${year}-${month.toString().padStart(2, '0')} 的数据吗？此操作不可撤销。`)) {
+        return;
+    }
+    
+    fetch(`/upload/${year}/${month}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('删除失败：' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('删除时发生错误');
+    });
+}
+</script>
+{% endblock %}

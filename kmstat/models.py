@@ -83,6 +83,116 @@ class Character(db.Model):
         "Killmail", back_populates="character"
     )
 
+    @classmethod
+    def find_or_create_by_name(
+        cls, character_name: str, player_title: str = None
+    ) -> "Character":
+        """
+        Find an existing character by name, or create a new one.
+        If player_title is provided, associate the character with that player.
+        """
+        # First, try to find existing character by name
+        character = cls.query.filter_by(name=character_name).first()
+
+        if character:
+            # Character exists, optionally update player association
+            if player_title and character.title != player_title:
+                character.updatePlayer(player_title)
+            return character
+
+        # Character doesn't exist, create new one
+        # Try to get character info from API first
+        from kmstat.api import api
+
+        # First get character ID by name
+        character_id = api.get_character_id_by_name(character_name)
+
+        if character_id:
+            # Character found in API, get full character data
+            character = api.get_character(character_id)
+            if not character:
+                # Fallback if get_character fails but we have ID
+                character = cls(id=character_id, name=character_name)
+        else:
+            # Character not found in API, report failure instead of creating
+            from kmstat.upload_service import UploadError
+
+            raise UploadError(
+                f"Character '{character_name}' not found in EVE Online ESI"
+            )
+
+        # Associate with player - every character must have a player
+        if player_title:
+            # Determine the best title to use for player association
+            final_player_title = player_title  # Default to imported title
+
+            # If we got character from ESI and it has a title, prefer ESI title
+            if hasattr(character, "title") and character.title:
+                final_player_title = character.title
+
+            # Try to find existing player by the final title
+            player = Player.find_by_title(final_player_title)
+            if not player:
+                # If no player found with ESI title, also check with imported title
+                if final_player_title != player_title:
+                    player = Player.find_by_title(player_title)
+
+                if not player:
+                    # Create new player with the best available title
+                    player = Player(title=final_player_title)
+                    db.session.add(player)
+                    db.session.flush()
+
+            # Update character title to match the player title used
+            character.title = final_player_title
+            character.player = player
+
+            # Add character to session before setting as main character
+            db.session.add(character)
+            db.session.flush()
+
+            # Set as main character if player has no main character
+            if not player.mainchar:
+                player.mainchar = character
+        else:
+            # No player title provided, check if character has ESI title
+            if hasattr(character, "title") and character.title:
+                # Use ESI title as player title
+                final_player_title = character.title
+
+                # Try to find existing player
+                player = Player.find_by_title(final_player_title)
+                if not player:
+                    # Create new player with ESI title
+                    player = Player(title=final_player_title)
+                    db.session.add(player)
+                    db.session.flush()
+
+                character.player = player
+
+                # Add character to session before setting as main character
+                db.session.add(character)
+                db.session.flush()
+
+                # Set as main character if player has no main character
+                if not player.mainchar:
+                    player.mainchar = character
+            else:
+                # No title available, associate with default "查无此人" player
+                default_player = Player.query.filter_by(title="__查无此人__").first()
+                if not default_player:
+                    # Create the default player if it doesn't exist
+                    default_player = Player(title="__查无此人__")
+                    db.session.add(default_player)
+                    db.session.flush()
+
+                character.player = default_player
+                # Add character to session
+                db.session.add(character)
+                db.session.flush()
+
+        return character
+
     def updatePlayer(self, title: str = None) -> bool:
         """
         Update the character's player based on title.
@@ -258,3 +368,111 @@ class SystemState(db.Model):
                 db.session.add(state)
             state.date_value = date_value
             db.session.commit()
+
+
+class MonthlyUpload(db.Model):
+    """Store metadata for each monthly upload."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    year: Mapped[int] = mapped_column(nullable=False)
+    month: Mapped[int] = mapped_column(nullable=False)
+    upload_date: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    tax_rate: Mapped[float] = mapped_column(
+        nullable=False
+    )  # Tax rate as decimal (e.g., 0.1 for 10%)
+    ore_convert_rate: Mapped[float] = mapped_column(
+        nullable=False
+    )  # Ore conversion rate
+    uploaded_by_id: Mapped[int] = mapped_column(
+        db.ForeignKey("user.id"), nullable=False
+    )
+    uploaded_by: Mapped["User"] = db.relationship("User")
+
+    # Relationships to the actual data
+    pap_records: Mapped[list["PAPRecord"]] = db.relationship(
+        "PAPRecord", back_populates="upload", cascade="all, delete-orphan"
+    )
+    bounty_records: Mapped[list["BountyRecord"]] = db.relationship(
+        "BountyRecord", back_populates="upload", cascade="all, delete-orphan"
+    )
+    mining_records: Mapped[list["MiningRecord"]] = db.relationship(
+        "MiningRecord", back_populates="upload", cascade="all, delete-orphan"
+    )
+
+    # Ensure unique year-month combination
+    __table_args__ = (db.UniqueConstraint("year", "month", name="unique_year_month"),)
+
+    def __repr__(self):
+        return f"<MonthlyUpload {self.year}-{self.month:02d}>"
+
+
+class PAPRecord(db.Model):
+    """Store PAP (Player Activity Points) data."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_id: Mapped[int] = mapped_column(
+        db.ForeignKey("monthly_upload.id"), nullable=False
+    )
+    upload: Mapped["MonthlyUpload"] = db.relationship(
+        "MonthlyUpload", back_populates="pap_records"
+    )
+
+    # Link to character (required - character must be created if not exists)
+    character_id: Mapped[int] = mapped_column(
+        db.ForeignKey("character.id"), nullable=False
+    )
+    character: Mapped["Character"] = db.relationship("Character")
+
+    pap_points: Mapped[float] = mapped_column(nullable=False)
+    strategic_pap_points: Mapped[float] = mapped_column(nullable=False)
+
+    def __repr__(self):
+        return f"<PAPRecord {self.character.name if self.character else 'Unknown'}: {self.pap_points} PAP>"
+
+
+class BountyRecord(db.Model):
+    """Store bounty/tax data."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_id: Mapped[int] = mapped_column(
+        db.ForeignKey("monthly_upload.id"), nullable=False
+    )
+    upload: Mapped["MonthlyUpload"] = db.relationship(
+        "MonthlyUpload", back_populates="bounty_records"
+    )
+
+    # Link to character (required - character must be created if not exists)
+    character_id: Mapped[int] = mapped_column(
+        db.ForeignKey("character.id"), nullable=False
+    )
+    character: Mapped["Character"] = db.relationship("Character")
+
+    tax_isk: Mapped[float] = mapped_column(nullable=False)  # Tax amount in ISK
+
+    def __repr__(self):
+        return f"<BountyRecord {self.character.name if self.character else 'Unknown'}: {self.tax_isk:,.0f} ISK>"
+
+
+class MiningRecord(db.Model):
+    """Store mining data."""
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    upload_id: Mapped[int] = mapped_column(
+        db.ForeignKey("monthly_upload.id"), nullable=False
+    )
+    upload: Mapped["MonthlyUpload"] = db.relationship(
+        "MonthlyUpload", back_populates="mining_records"
+    )
+
+    # Link to character (required - character must be created if not exists)
+    character_id: Mapped[int] = mapped_column(
+        db.ForeignKey("character.id"), nullable=False
+    )
+    character: Mapped["Character"] = db.relationship("Character")
+
+    volume_m3: Mapped[float] = mapped_column(nullable=False)  # Volume in cubic meters
+
+    def __repr__(self):
+        return f"<MiningRecord {self.character.name if self.character else 'Unknown'}: {self.volume_m3:,.1f} m³>"

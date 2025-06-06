@@ -1,11 +1,15 @@
 from datetime import datetime
-from flask import render_template, request, jsonify
-from flask_login import login_required
+from flask import render_template, request, jsonify, send_file
+from flask_login import login_required, current_user
 from sqlalchemy import func
 from kmstat import app, db
 from kmstat.models import Player, Character, Killmail
 from kmstat.config import config
 from kmstat.utils import get_last_day_of_month
+import os
+from werkzeug.utils import secure_filename
+from kmstat.upload_service import MonthlyUploadService, UploadError
+from kmstat.models import MonthlyUpload
 
 
 @app.route("/")
@@ -316,3 +320,193 @@ def set_main_character(character_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"success": False, "message": f"设置失败: {str(e)}"})
+
+
+@app.route("/upload", methods=["GET", "POST"])
+@login_required
+def upload_monthly_data():
+    """Upload monthly data from Excel file."""
+    if request.method == "GET":
+        # Calculate default year and month (last month)
+        from datetime import datetime
+
+        current_date = datetime.now()
+        if current_date.month == 1:
+            # If current month is January, last month is December of previous year
+            default_year = current_date.year - 1
+            default_month = 12
+        else:
+            # Otherwise, just subtract 1 from current month
+            default_year = current_date.year
+            default_month = current_date.month - 1
+
+        # Get default tax rate and ore convert rate from last upload
+        last_upload = MonthlyUpload.query.order_by(
+            MonthlyUpload.year.desc(), MonthlyUpload.month.desc()
+        ).first()
+
+        default_tax_rate = last_upload.tax_rate if last_upload else 0.1
+        default_ore_convert_rate = (
+            last_upload.ore_convert_rate if last_upload else 300.0
+        )
+
+        # Show upload form with existing uploads
+        uploads = MonthlyUpload.query.order_by(
+            MonthlyUpload.year.desc(), MonthlyUpload.month.desc()
+        ).all()
+
+        return render_template(
+            "upload.html.jinja2",
+            uploads=uploads,
+            default_year=default_year,
+            default_month=default_month,
+            default_tax_rate=default_tax_rate,
+            default_ore_convert_rate=default_ore_convert_rate,
+        )
+
+    # Handle POST request
+    try:
+        # Validate form data
+        if "file" not in request.files:
+            return jsonify({"success": False, "message": "没有选择文件"})
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"success": False, "message": "没有选择文件"})
+
+        if not file.filename.endswith((".xlsx", ".xls")):
+            return jsonify(
+                {"success": False, "message": "文件格式必须是Excel (.xlsx或.xls)"}
+            )
+
+        year = request.form.get("year", type=int)
+        month = request.form.get("month", type=int)
+        tax_rate = request.form.get("tax_rate", type=float)
+        ore_convert_rate = request.form.get("ore_convert_rate", type=float)
+        overwrite = request.form.get("overwrite") == "true"
+
+        if not all([year, month, tax_rate is not None, ore_convert_rate is not None]):
+            return jsonify({"success": False, "message": "请填写所有必需字段"})
+
+        if not (1 <= month <= 12):
+            return jsonify({"success": False, "message": "月份必须在1-12之间"})
+
+        if tax_rate < 0 or tax_rate > 1:
+            return jsonify({"success": False, "message": "税率必须在0-1之间"})
+
+        # Save uploaded file temporarily
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(app.instance_path, "temp", filename)
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        file.save(temp_path)
+
+        try:
+            # Process the upload
+            upload = MonthlyUploadService.process_excel_upload(
+                temp_path,
+                year,
+                month,
+                tax_rate,
+                ore_convert_rate,
+                current_user,
+                overwrite,
+            )
+
+            summary = MonthlyUploadService.get_upload_summary(upload)
+
+            return jsonify(
+                {
+                    "success": True,
+                    "message": f"成功上传 {year}-{month:02d} 数据",
+                    "summary": summary,
+                }
+            )
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    except UploadError as e:
+        return jsonify({"success": False, "message": str(e)})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"上传失败: {str(e)}"})
+
+
+@app.route("/upload/<int:year>/<int:month>", methods=["DELETE"])
+@login_required
+def delete_monthly_data(year, month):
+    """Delete monthly data."""
+    try:
+        if MonthlyUploadService.delete_upload(year, month):
+            return jsonify(
+                {"success": True, "message": f"已删除 {year}-{month:02d} 数据"}
+            )
+        else:
+            return jsonify({"success": False, "message": "数据不存在"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"删除失败: {str(e)}"})
+
+
+@app.route("/upload/<int:year>/<int:month>/summary")
+def view_upload_summary(year, month):
+    """View summary of uploaded data."""
+    upload = MonthlyUpload.query.filter_by(year=year, month=month).first_or_404()
+    summary = MonthlyUploadService.get_upload_summary(upload)
+    return render_template("upload_summary.html.jinja2", upload=upload, summary=summary)
+
+
+@app.route("/download-template")
+@login_required
+def download_template():
+    """Generate and download Excel template file."""
+    import pandas as pd
+    from io import BytesIO
+
+    # Create empty template data with only column headers
+    pap_data = {
+        "名字": [],
+        "Title": [],
+        "PAP": [],
+        "战略PAP": [],
+    }
+
+    bounty_data = {
+        "名字": [],
+        "纳税(isk)": [],
+    }
+
+    mining_data = {
+        "名字": [],
+        "主人物": [],
+        "体积(m3)": [],
+    }
+
+    # Create DataFrames
+    pap_df = pd.DataFrame(pap_data)
+    bounty_df = pd.DataFrame(bounty_data)
+    mining_df = pd.DataFrame(mining_data)
+
+    # Create Excel file in memory
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pap_df.to_excel(writer, sheet_name="PAP", index=False)
+        bounty_df.to_excel(writer, sheet_name="赏金", index=False)
+        mining_df.to_excel(writer, sheet_name="挖矿", index=False)
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="monthly_data_template.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/upload/check-exists/<int:year>/<int:month>")
+@login_required
+def check_upload_exists(year, month):
+    """Check if upload data exists for the given year and month."""
+    exists = MonthlyUploadService.upload_exists(year, month)
+    return jsonify({"exists": exists})

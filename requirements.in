@@ -3,6 +3,7 @@ Flask
 Flask-Login
 Flask-Migrate
 Flask-SQLAlchemy
-requests
+openpyxl
 pandas
 python-dotenv
+requests

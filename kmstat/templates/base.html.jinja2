@@ -45,6 +45,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('character_claim') }}">无头衔角色认领</a>
                     </li>
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('upload_monthly_data') }}">月度数据上传</a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('help_page') }}">说明</a>
                     </li>

@@ -176,8 +176,8 @@ class API:
         """
         url = f"{self.ESI_ENDPOINT}/universe/ids/?datasource=tranquility"
 
-        # The API expects a list of names to search for
-        payload = {"names": [character_name]}
+        # The API expects a simple list of names to search for
+        payload = [character_name]
 
         response = self._make_request("POST", url, json=payload)
         if response.status_code != 200:
