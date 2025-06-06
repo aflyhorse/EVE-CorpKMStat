@@ -56,7 +56,7 @@
         {% if character_obj and character_obj.player %}
         <!-- Associated Player card takes 5 columns -->
         <div class="col-md-5">
-            <div class="card">
+            <div class="card mb-3">
                 <div class="card-header">
                     <h5 class="mb-0">关联玩家</h5>
                 </div>
@@ -74,14 +74,9 @@
                     </div>
                 </div>
             </div>
-        </div>
-        {% endif %}
-    </div>
-
-    {% if character_obj and character_obj.joindate %}
-    <!-- Character Join Date card -->
-    <div class="row mt-4">
-        <div class="col-md-12">
+            
+            {% if character_obj.joindate %}
+            <!-- Character Join Date card -->
             <div class="card">
                 <div class="card-header">
                     <h5 class="mb-0">入团日期</h5>
@@ -90,9 +85,10 @@
                     <p class="mb-0">{{ character_obj.joindate.strftime('%Y-%m-%d %H:%M:%S') }}</p>
                 </div>
             </div>
+            {% endif %}
         </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     {% if selected_character %}
     <!-- Kill records span full width -->
