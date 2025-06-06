@@ -11,12 +11,14 @@
         <form id="associateForm" method="POST" action="{{ url_for('associate_character', character_id=character.id) }}">
             <div class="mb-3">
                 <label for="playerSelect" class="form-label">选择现有玩家</label>
-                <select class="form-select" id="playerSelect" name="player_id">
-                    <option value="">-- 选择现有玩家 --</option>
+                <input class="form-control" list="playerList" id="playerSelect" 
+                       placeholder="输入搜索现有玩家" autocomplete="off">
+                <datalist id="playerList">
                     {% for player in players %}
-                    <option value="{{ player.id }}">{{ player.title }}</option>
+                    <option value="{{ player.title }}" data-id="{{ player.id }}">
                     {% endfor %}
-                </select>
+                </datalist>
+                <input type="hidden" name="player_id" id="player_id" value="">
             </div>
             
             <div class="mb-3">
@@ -31,7 +33,6 @@
             
             <div class="mb-3">
                 <button type="submit" class="btn btn-primary">关联角色</button>
-                <button type="button" class="btn btn-secondary" onclick="cancelAssociation()">取消</button>
             </div>
         </form>
         
@@ -48,18 +49,33 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Handle datalist input selection
+        document.getElementById('playerSelect').addEventListener('input', function (e) {
+            const datalist = document.getElementById('playerList');
+            const hiddenInput = document.getElementById('player_id');
+            const options = datalist.getElementsByTagName('option');
+
+            for (let option of options) {
+                if (option.value === this.value) {
+                    hiddenInput.value = option.dataset.id;
+                    return;
+                }
+            }
+            hiddenInput.value = '';
+        });
+
         document.getElementById('associateForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const playerSelect = document.getElementById('playerSelect').value;
+            const playerId = document.getElementById('player_id').value;
             const newPlayerTitle = document.getElementById('newPlayerTitle').value;
             
-            if (!playerSelect && !newPlayerTitle) {
+            if (!playerId && !newPlayerTitle) {
                 alert('请选择现有玩家或输入新玩家头衔');
                 return;
             }
             
-            if (playerSelect && newPlayerTitle) {
+            if (playerId && newPlayerTitle) {
                 alert('请只选择一个选项：现有玩家或新玩家头衔');
                 return;
             }
@@ -85,10 +101,6 @@
                 alert('发生错误，请重试');
             });
         });
-        
-        function cancelAssociation() {
-            parent.postMessage({type: 'association_cancelled'}, '*');
-        }
     </script>
 </body>
 </html>
