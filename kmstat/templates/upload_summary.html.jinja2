@@ -65,128 +65,49 @@
         </div>
     </div>
     
-    <!-- Data tabs -->
-    <ul class="nav nav-tabs" id="dataTab" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="pap-tab" data-bs-toggle="tab" data-bs-target="#pap" 
-                    type="button" role="tab">PAP数据</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="bounty-tab" data-bs-toggle="tab" data-bs-target="#bounty" 
-                    type="button" role="tab">赏金数据</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="mining-tab" data-bs-toggle="tab" data-bs-target="#mining" 
-                    type="button" role="tab">挖矿数据</button>
-        </li>
-    </ul>
-    
-    <div class="tab-content" id="dataTabContent">
-        <!-- PAP Data -->
-        <div class="tab-pane fade show active" id="pap" role="tabpanel">
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>角色名</th>
-                                    <th>玩家头衔</th>
-                                    <th>PAP</th>
-                                    <th>战略PAP</th>
-                                    <th>关联状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for record in upload.pap_records %}
-                                <tr>
-                                    <td>{{ record.character_name }}</td>
-                                    <td>{{ record.player_title }}</td>
-                                    <td>{{ record.pap_points }}</td>
-                                    <td>{{ record.strategic_pap_points }}</td>
-                                    <td>
-                                        {% if record.character %}
-                                        <span class="badge bg-success">已关联</span>
-                                        {% else %}
-                                        <span class="badge bg-warning">未关联</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+    <!-- Player Summary Data -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">玩家汇总数据</h5>
         </div>
-        
-        <!-- Bounty Data -->
-        <div class="tab-pane fade" id="bounty" role="tabpanel">
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>角色名</th>
-                                    <th>纳税(ISK)</th>
-                                    <th>关联状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for record in upload.bounty_records %}
-                                <tr>
-                                    <td>{{ record.character_name }}</td>
-                                    <td>{{ "{:,.0f}".format(record.tax_isk) }}</td>
-                                    <td>
-                                        {% if record.character %}
-                                        <span class="badge bg-success">已关联</span>
-                                        {% else %}
-                                        <span class="badge bg-warning">未关联</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Mining Data -->
-        <div class="tab-pane fade" id="mining" role="tabpanel">
-            <div class="card">
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>角色名</th>
-                                    <th>主人物</th>
-                                    <th>体积(m³)</th>
-                                    <th>关联状态</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for record in upload.mining_records %}
-                                <tr>
-                                    <td>{{ record.character_name }}</td>
-                                    <td>{{ record.main_character_name }}</td>
-                                    <td>{{ "{:,.1f}".format(record.volume_m3) }}</td>
-                                    <td>
-                                        {% if record.character %}
-                                        <span class="badge bg-success">已关联</span>
-                                        {% else %}
-                                        <span class="badge bg-warning">未关联</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>玩家</th>
+                            <th>主角色</th>
+                            <th>状态</th>
+                            <th class="text-end">总纳税额 (ISK)</th>
+                            <th class="text-end">总挖矿体积 (m³)</th>
+                            <th class="text-end">总收入 (ISK)</th>
+                            <th class="text-end">战略PAP</th>
+                            <th class="text-end">总PAP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for player_data in summary.player_summary %}
+                        <tr>
+                            <td><a href="{{ url_for('search_player', player_id=player_data.player_id) }}" class="text-decoration-none">{{ player_data.player_title }}</a></td>
+                            <td>{{ player_data.main_character or '-' }}</td>
+                            <td>
+                                {% if player_data.status == '合格' %}
+                                    <span class="badge bg-success text-white">{{ player_data.status }}</span>
+                                {% elif player_data.status.startswith('罚款') %}
+                                    <span class="badge bg-danger text-white">{{ player_data.status }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">{{ player_data.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ "{:,.0f}".format(player_data.total_tax) }}</td>
+                            <td class="text-end">{{ "{:,.1f}".format(player_data.total_mining_volume) }}</td>
+                            <td class="text-end">{{ "{:,.0f}".format(player_data.total_income) }}</td>
+                            <td class="text-end">{{ player_data.strategic_pap }}</td>
+                            <td class="text-end">{{ player_data.total_pap }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

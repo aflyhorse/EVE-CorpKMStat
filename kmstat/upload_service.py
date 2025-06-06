@@ -243,6 +243,182 @@ class MonthlyUploadService:
     @staticmethod
     def get_upload_summary(upload: MonthlyUpload) -> dict:
         """Get a summary of an upload."""
+        # Aggregate data by player
+        player_data = {}
+
+        # Process PAP records
+        for pap_record in upload.pap_records:
+            character = pap_record.character
+            if character and character.player:
+                player_title = character.player.title
+                player_id = character.player.id
+                main_character = (
+                    character.player.mainchar.name
+                    if character.player.mainchar
+                    else None
+                )
+            else:
+                player_title = pap_record.player_title or "__查无此人__"
+                # Find the default player ID
+                from kmstat.models import Player
+
+                default_player = Player.query.filter_by(title="__查无此人__").first()
+                player_id = default_player.id if default_player else None
+                main_character = None
+
+            if player_title not in player_data:
+                player_data[player_title] = {
+                    "player_title": player_title,
+                    "player_id": player_id,
+                    "main_character": main_character,
+                    "total_tax": 0.0,
+                    "total_mining_volume": 0.0,
+                    "total_pap": 0.0,
+                    "strategic_pap": 0.0,
+                    "total_income": 0.0,
+                    "status": "",
+                }
+
+            player_data[player_title]["total_pap"] += pap_record.pap_points
+            player_data[player_title][
+                "strategic_pap"
+            ] += pap_record.strategic_pap_points
+
+            # Update main character if we have one and haven't set it yet
+            if main_character and not player_data[player_title]["main_character"]:
+                player_data[player_title]["main_character"] = main_character
+
+        # Process bounty records
+        for bounty_record in upload.bounty_records:
+            character = bounty_record.character
+            if character and character.player:
+                player_title = character.player.title
+                player_id = character.player.id
+                main_character = (
+                    character.player.mainchar.name
+                    if character.player.mainchar
+                    else None
+                )
+            else:
+                player_title = "__查无此人__"
+                # Find the default player ID
+                from kmstat.models import Player
+
+                default_player = Player.query.filter_by(title="__查无此人__").first()
+                player_id = default_player.id if default_player else None
+                main_character = None
+
+            if player_title not in player_data:
+                player_data[player_title] = {
+                    "player_title": player_title,
+                    "player_id": player_id,
+                    "main_character": main_character,
+                    "total_tax": 0.0,
+                    "total_mining_volume": 0.0,
+                    "total_pap": 0.0,
+                    "strategic_pap": 0.0,
+                    "total_income": 0.0,
+                    "status": "",
+                }
+
+            player_data[player_title]["total_tax"] += bounty_record.tax_isk
+
+            # Update main character if we have one and haven't set it yet
+            if main_character and not player_data[player_title]["main_character"]:
+                player_data[player_title]["main_character"] = main_character
+
+        # Process mining records
+        for mining_record in upload.mining_records:
+            character = mining_record.character
+            if character and character.player:
+                player_title = character.player.title
+                player_id = character.player.id
+                main_character = (
+                    character.player.mainchar.name
+                    if character.player.mainchar
+                    else None
+                )
+            else:
+                player_title = "__查无此人__"
+                # Find the default player ID
+                from kmstat.models import Player
+
+                default_player = Player.query.filter_by(title="__查无此人__").first()
+                player_id = default_player.id if default_player else None
+                main_character = None
+
+            if player_title not in player_data:
+                player_data[player_title] = {
+                    "player_title": player_title,
+                    "player_id": player_id,
+                    "main_character": main_character,
+                    "total_tax": 0.0,
+                    "total_mining_volume": 0.0,
+                    "total_pap": 0.0,
+                    "strategic_pap": 0.0,
+                    "total_income": 0.0,
+                    "status": "",
+                }
+
+            player_data[player_title]["total_mining_volume"] += mining_record.volume_m3
+
+            # Update main character if we have one and haven't set it yet
+            if main_character and not player_data[player_title]["main_character"]:
+                player_data[player_title]["main_character"] = main_character
+
+        # Calculate total income and status for each player
+        from datetime import date
+
+        first_day_of_month = date(upload.year, upload.month, 1)
+
+        for player_title in player_data:
+            player_info = player_data[player_title]
+            tax_income = (
+                player_info["total_tax"] / upload.tax_rate if upload.tax_rate > 0 else 0
+            )
+            ore_income = player_info["total_mining_volume"] * upload.ore_convert_rate
+            player_info["total_income"] = tax_income + ore_income
+
+            # Calculate status based on PAP and income
+            total_pap = player_info["total_pap"]
+            total_income = player_info["total_income"]
+
+            if total_pap >= 3:
+                player_info["status"] = "合格"
+            elif total_pap < 3:
+                # Find the player's join date
+                from kmstat.models import Player
+
+                player = Player.query.filter_by(title=player_title).first()
+                if player and player.joindate:
+                    days_since_join = (first_day_of_month - player.joindate.date()).days
+                    if days_since_join < 90:
+                        # 新人保护 has highest priority for new players regardless of income
+                        player_info["status"] = "新人保护"
+                    elif total_income >= 1_000_000_000:  # 1 billion ISK
+                        fine_amount = 3 - total_pap
+                        player_info["status"] = f"罚款：{fine_amount}"
+                    else:
+                        player_info["status"] = "低收入豁免"
+                else:
+                    # No join date, assume they need fine if high income
+                    if total_income >= 1_000_000_000:  # 1 billion ISK
+                        fine_amount = 3 - total_pap
+                        player_info["status"] = f"罚款：{fine_amount}"
+                    else:
+                        player_info["status"] = "低收入豁免"
+            else:
+                player_info["status"] = "未知"
+
+        # Convert to list and sort by total PAP (descending)
+        player_summary = list(player_data.values())
+        player_summary.sort(key=lambda x: x["total_pap"], reverse=True)
+
+        # Convert to objects for easier template access
+        from types import SimpleNamespace
+
+        player_summary = [SimpleNamespace(**data) for data in player_summary]
+
         return {
             "year": upload.year,
             "month": upload.month,
@@ -253,6 +429,7 @@ class MonthlyUploadService:
             "pap_records": len(upload.pap_records),
             "bounty_records": len(upload.bounty_records),
             "mining_records": len(upload.mining_records),
+            "player_summary": player_summary,
         }
 
     @staticmethod
