@@ -104,17 +104,32 @@ class API:
     def get_character(self, character_id):
         """
         Get character information from EVE Online ESI.
+        Also fetches the corporation join date automatically.
         """
         url = f"{self.ESI_ENDPOINT}/characters/{character_id}/?datasource=tranquility"
         response = self._make_request("GET", url)
         if response.status_code == 200:
             from kmstat.models import Character
+            from kmstat.config import config
 
-            return Character(
+            character_data = response.json()
+
+            # Create character with basic info
+            character = Character(
                 id=character_id,
-                name=response.json().get("name"),
-                title=response.json().get("title"),
+                name=character_data.get("name"),
+                title=character_data.get("title"),
             )
+
+            # Try to get the corporation join date
+            join_date = self.get_character_corp_join_date(character_id, config.corporation_id)
+            if join_date:
+                character.joindate = join_date
+                logging.info(f"Set join date for new character {character.name}: {join_date}")
+            else:
+                logging.warning(f"Could not get join date for new character {character.name}")
+
+            return character
         return None
 
     @retry_with_backoff(max_retries=5, initial_delay=2)
