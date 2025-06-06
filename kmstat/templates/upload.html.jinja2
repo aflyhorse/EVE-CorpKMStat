@@ -76,7 +76,16 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">已上传数据</h5>
+                    <h5 class="mb-0">
+                        已上传数据
+                        {% if has_unclaimed %}
+                        <span class="text-danger ms-2">
+                            <a href="{{ url_for('character_claim') }}" class="text-danger text-decoration-none fw-bold">
+                                {{ render_icon('exclamation-triangle-fill') }} 存在未关联角色！
+                            </a>
+                        </span>
+                        {% endif %}
+                    </h5>
                 </div>
                 <div class="card-body">
                     {% if uploads %}
@@ -159,7 +168,11 @@ function performUpload(formData, uploadBtn, uploadSpinner) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert('上传成功！\\n' + data.message);
+            let message = '上传成功！\\n' + data.message;
+            if (data.has_unclaimed) {
+                message += '\\n\\n⚠️ 警告：存在未关联角色！\\n页面刷新后，请点击红色警告链接前往角色认领页面进行关联。';
+            }
+            alert(message);
             location.reload();
         } else {
             alert('上传失败：' + data.message);

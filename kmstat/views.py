@@ -12,6 +12,17 @@ from kmstat.upload_service import MonthlyUploadService, UploadError
 from kmstat.models import MonthlyUpload
 
 
+def has_unclaimed_characters():
+    """Check if there are any unclaimed characters (associated with __查无此人__)"""
+    default_player = Player.query.filter_by(title="__查无此人__").first()
+    if not default_player:
+        return False
+
+    # Check if any characters are associated with the default player
+    unclaimed_count = Character.query.filter_by(player_id=default_player.id).count()
+    return unclaimed_count > 0
+
+
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
@@ -355,6 +366,9 @@ def upload_monthly_data():
             MonthlyUpload.year.desc(), MonthlyUpload.month.desc()
         ).all()
 
+        # Check for unclaimed characters
+        has_unclaimed = has_unclaimed_characters()
+
         return render_template(
             "upload.html.jinja2",
             uploads=uploads,
@@ -362,6 +376,7 @@ def upload_monthly_data():
             default_month=default_month,
             default_tax_rate=default_tax_rate,
             default_ore_convert_rate=default_ore_convert_rate,
+            has_unclaimed=has_unclaimed,
         )
 
     # Handle POST request
@@ -414,11 +429,15 @@ def upload_monthly_data():
 
             summary = MonthlyUploadService.get_upload_summary(upload)
 
+            # Check for unclaimed characters after upload
+            has_unclaimed = has_unclaimed_characters()
+
             return jsonify(
                 {
                     "success": True,
                     "message": f"成功上传 {year}-{month:02d} 数据",
                     "summary": summary,
+                    "has_unclaimed": has_unclaimed,
                 }
             )
 
