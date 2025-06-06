@@ -1,5 +1,6 @@
 from datetime import datetime
-from flask import render_template, request
+from flask import render_template, request, jsonify
+from flask_login import login_required
 from sqlalchemy import func
 from kmstat import app, db
 from kmstat.models import Player, Character, Killmail
@@ -200,11 +201,12 @@ def search_char():
 
 @app.route("/character-claim")
 def character_claim():
-    # Get the first player's characters
-    first_player = Player.query.first()
+    # Get characters that are associated with the default "__查无此人__" player
+    # These are characters that need proper player association
+    default_player = Player.query.filter_by(title="__查无此人__").first()
     characters = (
-        Character.query.filter_by(player_id=first_player.id).all()
-        if first_player
+        Character.query.filter_by(player_id=default_player.id).all()
+        if default_player
         else []
     )
 
@@ -218,4 +220,73 @@ def help_page():
     return render_template(
         "help.html.jinja2",
         config=config,
+    )
+
+
+@app.route("/associate-character/<int:character_id>", methods=["GET", "POST"])
+@login_required
+def associate_character(character_id):
+    """Associate a character with a player (iframe view)."""
+    character = Character.query.get_or_404(character_id)
+
+    if request.method == "POST":
+        player_id = request.form.get("player_id")
+        new_player_title = request.form.get("new_player_title")
+
+        try:
+            if player_id:
+                # Associate with existing player
+                player = Player.query.get(player_id)
+                if not player:
+                    return jsonify({"success": False, "message": "选择的玩家不存在"})
+
+                # Use updatePlayer method to properly handle join dates
+                if character.updatePlayer(player.title):
+                    return jsonify(
+                        {
+                            "success": True,
+                            "message": f"角色 {character.name} 已关联到玩家 {player.title}",
+                        }
+                    )
+                else:
+                    return jsonify({"success": False, "message": "关联失败"})
+
+            elif new_player_title:
+                # Create new player and associate
+                new_player_title = new_player_title.strip()
+                if not new_player_title:
+                    return jsonify({"success": False, "message": "玩家头衔不能为空"})
+
+                # Check if player with this title already exists
+                existing_player = Player.query.filter_by(title=new_player_title).first()
+                if existing_player:
+                    return jsonify({"success": False, "message": "该头衔的玩家已存在"})
+
+                # Use updatePlayer method to create new player and associate
+                if character.updatePlayer(new_player_title):
+                    return jsonify(
+                        {
+                            "success": True,
+                            "message": f"已创建新玩家 {new_player_title} 并关联角色 {character.name}",
+                        }
+                    )
+                else:
+                    return jsonify({"success": False, "message": "创建玩家失败"})
+            else:
+                return jsonify(
+                    {"success": False, "message": "请选择现有玩家或输入新玩家头衔"}
+                )
+
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"success": False, "message": f"关联失败: {str(e)}"})
+
+    # GET request - show the form
+    # Get all players except the default "__查无此人__" player
+    players = (
+        Player.query.filter(Player.title != "__查无此人__").order_by(Player.title).all()
+    )
+
+    return render_template(
+        "associate_character.html.jinja2", character=character, players=players
     )

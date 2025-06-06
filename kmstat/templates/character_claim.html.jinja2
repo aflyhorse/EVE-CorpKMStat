@@ -13,12 +13,23 @@
                     <thead>
                         <tr>
                             <th>角色名称</th>
+                            {% if current_user.is_authenticated %}
+                            <th>操作</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody>
                         {% for character in characters %}
                         <tr>
                             <td>{{ character.name }}</td>
+                            {% if current_user.is_authenticated %}
+                            <td>
+                                <button type="button" class="btn btn-primary btn-sm" 
+                                        onclick="openAssociateModal({{ character.id }}, '{{ character.name }}')">
+                                    关联玩家
+                                </button>
+                            </td>
+                            {% endif %}
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -27,4 +38,42 @@
         </div>
     </div>
 </div>
+
+{% if current_user.is_authenticated %}
+<!-- Modal for character association -->
+<div class="modal fade" id="associateModal" tabindex="-1" aria-labelledby="associateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="associateModalLabel">关联角色到玩家</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>角色: <strong id="characterName"></strong></p>
+                <iframe id="associateFrame" src="" style="width: 100%; height: 400px; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openAssociateModal(characterId, characterName) {
+    document.getElementById('characterName').textContent = characterName;
+    document.getElementById('associateFrame').src = '/associate-character/' + characterId;
+    
+    var modal = new bootstrap.Modal(document.getElementById('associateModal'));
+    modal.show();
+}
+
+// Listen for messages from the iframe
+window.addEventListener('message', function(event) {
+    if (event.data.type === 'association_complete') {
+        // Close the modal and reload the page
+        var modal = bootstrap.Modal.getInstance(document.getElementById('associateModal'));
+        modal.hide();
+        location.reload();
+    }
+});
+</script>
+{% endif %}
 {% endblock %}
