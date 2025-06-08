@@ -4,6 +4,7 @@ Service for handling monthly Excel file uploads.
 
 import pandas as pd
 import os
+import sys
 from datetime import datetime
 from flask import current_app
 from kmstat import db
@@ -15,6 +16,7 @@ from kmstat.models import (
     MiningRecord,
     Character,
     User,
+    Player,
 )
 
 
@@ -286,6 +288,12 @@ class MonthlyUploadService:
             # We just need to refresh the upload object to see the related records
             db.session.refresh(upload)
 
+            # Resolve newly created characters with ESI data
+            current_app.logger.info(
+                "Resolving newly created characters with ESI data..."
+            )
+            MonthlyUploadService._resolve_new_characters(upload)
+
             current_app.logger.info(
                 f"Successfully uploaded {year}-{month:02d}: "
                 f"{pap_count} PAP records, {bounty_count} bounty records, "
@@ -342,24 +350,36 @@ class MonthlyUploadService:
                 float(row["战略PAP"]) if not pd.isna(row["战略PAP"]) else 0.0
             )
 
-            # Find or create character with player association (no API calls)
+            # Find or create character with player association (no API calls during upload)
             character = (
                 db.session.query(Character).filter_by(name=character_name).first()
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
-                from kmstat.models import Player
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
 
                 # Find or create player
                 player = db.session.query(Player).filter_by(title=player_title).first()
                 if not player:
+                    current_app.logger.info(
+                        f"Creating new player during upload: {player_title}"
+                    )
                     player = Player(title=player_title)
                     db.session.add(player)
                     db.session.flush()
 
-                # Create character with minimal info (no API call or ESI validation)
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
                 character = Character(
-                    name=character_name, title=player_title, player=player
+                    id=temp_id, name=character_name, title=player_title, player=player
                 )
                 db.session.add(character)
                 db.session.flush()
@@ -398,13 +418,15 @@ class MonthlyUploadService:
             character_name = str(row["名字"]).strip()
             tax_isk = float(row["纳税(isk)"])
 
-            # Find or create character (no player title provided in bounty sheet, no API calls)
+            # Find or create character (no player title provided in bounty sheet, no API calls during upload)
             character = (
                 db.session.query(Character).filter_by(name=character_name).first()
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
-                from kmstat.models import Player
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
 
                 # Associate with default player
                 default_player = (
@@ -415,8 +437,17 @@ class MonthlyUploadService:
                     db.session.add(default_player)
                     db.session.flush()
 
-                # Create character with minimal info (no API call)
-                character = Character(name=character_name, player=default_player)
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
+                character = Character(
+                    id=temp_id, name=character_name, player=default_player
+                )
                 db.session.add(character)
                 db.session.flush()
 
@@ -454,13 +485,15 @@ class MonthlyUploadService:
             )
             volume_m3 = float(row["体积(m3)"])
 
-            # Handle character association with player based on main character (no API calls)
+            # Handle character association with player based on main character (no API calls during upload)
             character = (
                 db.session.query(Character).filter_by(name=character_name).first()
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
-                from kmstat.models import Player
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
 
                 player = None
                 if main_character_name:
@@ -484,8 +517,15 @@ class MonthlyUploadService:
                         db.session.add(player)
                         db.session.flush()
 
-                # Create character with minimal info (no API call)
-                character = Character(name=character_name, player=player)
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
+                character = Character(id=temp_id, name=character_name, player=player)
                 db.session.add(character)
                 db.session.flush()
 
@@ -496,6 +536,250 @@ class MonthlyUploadService:
             count += 1
 
         return count
+
+    @staticmethod
+    def _resolve_new_characters(upload: MonthlyUpload):
+        """
+        Resolve newly created characters with ESI data and update their information.
+        This method identifies characters with temporary negative IDs and resolves them.
+        """
+        try:
+            from kmstat.api import api
+
+            # Refresh the database session to see any changes from concurrent processing
+            db.session.expire_all()
+
+            # Find all characters with negative IDs (temporary characters created during upload)
+            new_characters = db.session.query(Character).filter(Character.id < 0).all()
+
+            if not new_characters:
+                current_app.logger.info("No new characters to resolve")
+                return
+
+            current_app.logger.info(
+                f"Found {len(new_characters)} new characters to resolve with ESI"
+            )
+
+            resolved_count = 0
+            failed_count = 0
+
+            for character in new_characters:
+                try:
+                    current_app.logger.info(f"Resolving character: {character.name}")
+
+                    # Get character ID from ESI by name
+                    real_character_id = api.get_character_id_by_name(character.name)
+
+                    if not real_character_id:
+                        current_app.logger.warning(
+                            f"Character '{character.name}' not found in ESI, keeping as-is"
+                        )
+                        failed_count += 1
+                        continue
+
+                    # Check if a character with this real ID already exists
+                    existing_char = (
+                        db.session.query(Character)
+                        .filter_by(id=real_character_id)
+                        .first()
+                    )
+                    if existing_char:
+                        current_app.logger.warning(
+                            f"Character with ID {real_character_id} already exists, "
+                            f"merging records for {character.name}"
+                        )
+                        # Transfer all records from temp character to existing character
+                        MonthlyUploadService._merge_character_records(
+                            character, existing_char
+                        )
+                        # Delete the temporary character
+                        db.session.delete(character)
+                        db.session.flush()
+                        resolved_count += 1
+                        continue
+
+                    # Get full character data from ESI
+                    esi_character = api.get_character(real_character_id)
+
+                    if esi_character:
+                        # Update character with ESI data
+                        old_id = character.id
+                        character.id = real_character_id
+                        character.name = (
+                            esi_character.name
+                        )  # Use ESI name (might have different capitalization)
+
+                        # Update character's title and player association if ESI provides better info
+                        if esi_character.title and esi_character.title.strip():
+                            # ESI provided a title, use it to find or create better player association
+                            esi_title = esi_character.title.strip()
+
+                            # Find player with ESI title
+                            esi_player = (
+                                db.session.query(Player)
+                                .filter_by(title=esi_title)
+                                .first()
+                            )
+
+                            if not esi_player:
+                                # Create new player with ESI title
+                                current_app.logger.info(
+                                    f"Creating new player with ESI title: {esi_title}"
+                                )
+                                esi_player = Player(title=esi_title)
+                                db.session.add(esi_player)
+                                db.session.flush()
+
+                            # Check if character should be moved to the ESI player
+                            current_player = character.player
+                            if (
+                                current_player
+                                and current_player.title == "__查无此人__"
+                            ) or not current_player:
+                                # Move character from default player to ESI player
+                                current_app.logger.info(
+                                    f"Moving character {character.name} from default player to ESI player: {esi_title}"
+                                )
+                                character.player = esi_player
+                                character.title = esi_title
+
+                        # Set join date from ESI
+                        if esi_character.joindate:
+                            character.joindate = esi_character.joindate
+                            current_app.logger.info(
+                                f"Set join date for {character.name}: {esi_character.joindate}"
+                            )
+
+                        current_app.logger.info(
+                            f"Successfully resolved character {character.name}: "
+                            f"ID {old_id} -> {real_character_id}"
+                        )
+                        resolved_count += 1
+
+                    else:
+                        # ESI character fetch failed, but we have the ID
+                        current_app.logger.warning(
+                            f"Failed to get full character data for {character.name}, "
+                            f"updating ID only"
+                        )
+                        character.id = real_character_id
+                        resolved_count += 1
+
+                except Exception as e:
+                    current_app.logger.error(
+                        f"Failed to resolve character {character.name}: {str(e)}"
+                    )
+                    failed_count += 1
+                    continue
+
+            # Update player information after character resolution
+            current_app.logger.info(
+                "Updating player information after character resolution..."
+            )
+            MonthlyUploadService._update_players_after_resolution()
+
+            # Commit all changes
+            db.session.commit()
+
+            current_app.logger.info(
+                f"Character resolution completed: {resolved_count} resolved, {failed_count} failed"
+            )
+
+        except Exception as e:
+            current_app.logger.error(
+                f"Error during character resolution: {str(e)}", exc_info=True
+            )
+            db.session.rollback()
+            raise
+
+    @staticmethod
+    def _merge_character_records(
+        temp_character: Character, existing_character: Character
+    ):
+        """
+        Merge all records from a temporary character to an existing character.
+        """
+        # Update PAP records
+        pap_records = (
+            db.session.query(PAPRecord).filter_by(character=temp_character).all()
+        )
+        for record in pap_records:
+            record.character = existing_character
+
+        # Update bounty records
+        bounty_records = (
+            db.session.query(BountyRecord).filter_by(character=temp_character).all()
+        )
+        for record in bounty_records:
+            record.character = existing_character
+
+        # Update mining records
+        mining_records = (
+            db.session.query(MiningRecord).filter_by(character=temp_character).all()
+        )
+        for record in mining_records:
+            record.character = existing_character
+
+        current_app.logger.info(
+            f"Merged records from temp character {temp_character.name} to existing character {existing_character.name}"
+        )
+
+    @staticmethod
+    def _update_players_after_resolution():
+        """
+        Update player information after character resolution:
+        - Update join dates to earliest character join date
+        - Update main character selection
+        """
+        # Get all players that have characters (specify explicit join condition)
+        players_with_chars = (
+            db.session.query(Player)
+            .join(Character, Player.id == Character.player_id)
+            .distinct()
+            .all()
+        )
+
+        for player in players_with_chars:
+            try:
+                # Update player join date to earliest character join date
+                chars_with_dates = [
+                    c for c in player.characters if c.joindate is not None
+                ]
+                if chars_with_dates:
+                    earliest_date = min(c.joindate for c in chars_with_dates)
+                    if player.joindate is None or earliest_date < player.joindate:
+                        player.joindate = earliest_date
+                        current_app.logger.info(
+                            f"Updated player {player.title} join date to {earliest_date}"
+                        )
+
+                # Update main character to the one with earliest join date, or first character if no dates
+                if chars_with_dates:
+                    # Sort by join date and take the earliest
+                    chars_with_dates.sort(key=lambda c: c.joindate)
+                    new_main = chars_with_dates[0]
+                else:
+                    # No join dates, use first character
+                    new_main = player.characters[0] if player.characters else None
+
+                if new_main and (
+                    not player.mainchar
+                    or (
+                        new_main.joindate
+                        and player.mainchar.joindate
+                        and new_main.joindate < player.mainchar.joindate
+                    )
+                ):
+                    player.mainchar = new_main
+                    current_app.logger.info(
+                        f"Updated main character for player {player.title} to {new_main.name}"
+                    )
+
+            except Exception as e:
+                current_app.logger.error(
+                    f"Error updating player {player.title}: {str(e)}"
+                )
+                continue
 
     @staticmethod
     def get_upload_summary(upload: MonthlyUpload) -> dict:
@@ -683,6 +967,224 @@ class MonthlyUploadService:
             "mining_records": len(upload.mining_records),
             "player_summary": player_summary,
         }
+
+    @staticmethod
+    def _process_pap_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process PAP sheet data with a specific database session for threading."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "Title", "PAP", "战略PAP"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(f"PAP sheet missing columns: {', '.join(missing_cols)}")
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["Title"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            player_title = str(row["Title"]).strip()
+            pap_points = float(row["PAP"]) if not pd.isna(row["PAP"]) else 0.0
+            strategic_pap = (
+                float(row["战略PAP"]) if not pd.isna(row["战略PAP"]) else 0.0
+            )
+
+            # Find or create character with player association (no API calls during upload)
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from flask import current_app
+
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
+
+                # Find or create player
+                player = session.query(Player).filter_by(title=player_title).first()
+                if not player:
+                    current_app.logger.info(
+                        f"Creating new player during upload: {player_title}"
+                    )
+                    player = Player(title=player_title)
+                    session.add(player)
+                    session.flush()
+
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
+                character = Character(
+                    id=temp_id, name=character_name, title=player_title, player=player
+                )
+                session.add(character)
+                session.flush()
+
+            pap_record = PAPRecord(
+                upload=upload,
+                character=character,
+                pap_points=pap_points,
+                strategic_pap_points=strategic_pap,
+            )
+            session.add(pap_record)
+            count += 1
+
+        return count
+
+    @staticmethod
+    def _process_bounty_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process bounty sheet data with a specific database session for threading."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "纳税(isk)"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(
+                f"Bounty sheet missing columns: {', '.join(missing_cols)}"
+            )
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["纳税(isk)"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            tax_isk = float(row["纳税(isk)"])
+
+            # Find or create character (no player title provided in bounty sheet, no API calls during upload)
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from flask import current_app
+
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
+
+                # Associate with default player
+                default_player = (
+                    session.query(Player).filter_by(title="__查无此人__").first()
+                )
+                if not default_player:
+                    default_player = Player(title="__查无此人__")
+                    session.add(default_player)
+                    session.flush()
+
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
+                character = Character(
+                    id=temp_id, name=character_name, player=default_player
+                )
+                session.add(character)
+                session.flush()
+
+            bounty_record = BountyRecord(
+                upload=upload, character=character, tax_isk=tax_isk
+            )
+            session.add(bounty_record)
+            count += 1
+
+        return count
+
+    @staticmethod
+    def _process_mining_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process mining sheet data with a specific database session for threading."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "主人物", "体积(m3)"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(
+                f"Mining sheet missing columns: {', '.join(missing_cols)}"
+            )
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["体积(m3)"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            main_character_name = (
+                str(row["主人物"]).strip() if not pd.isna(row["主人物"]) else ""
+            )
+            volume_m3 = float(row["体积(m3)"])
+
+            # Handle character association with player based on main character (no API calls during upload)
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from flask import current_app
+
+                current_app.logger.info(
+                    f"Creating new character during upload: {character_name}"
+                )
+
+                player = None
+                if main_character_name:
+                    # Try to find the main character to get the player title
+                    main_char = (
+                        session.query(Character)
+                        .filter_by(name=main_character_name)
+                        .first()
+                    )
+                    if main_char and main_char.player:
+                        # Associate with the same player as the main character
+                        player = main_char.player
+
+                if not player:
+                    # No main character or player found, use default
+                    player = (
+                        session.query(Player).filter_by(title="__查无此人__").first()
+                    )
+                    if not player:
+                        player = Player(title="__查无此人__")
+                        session.add(player)
+                        session.flush()
+
+                # Create character with minimal info (will be resolved later)
+                # Use a temporary negative ID to mark it as needing resolution
+                import hashlib
+                import time
+
+                name_hash = abs(hash(character_name)) % 10000
+                temp_id = -(int(time.time() * 1000) + name_hash)
+
+                character = Character(id=temp_id, name=character_name, player=player)
+                session.add(character)
+                session.flush()
+
+            mining_record = MiningRecord(
+                upload=upload, character=character, volume_m3=volume_m3
+            )
+            session.add(mining_record)
+            count += 1
+
+        return count
 
     @staticmethod
     def delete_upload(year: int, month: int) -> bool:
