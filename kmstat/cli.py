@@ -673,3 +673,82 @@ def generate_random_password(length=12):
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     password = "".join(secrets.choice(alphabet) for _ in range(length))
     return password
+
+
+@app.cli.command()
+@click.option(
+    "--remove", is_flag=True, help="Remove dummy players (except the default player)."
+)
+def listdummyplayer(remove):
+    """
+    List all players that don't have any associated characters.
+    These are typically dummy players created during data imports.
+    Use --remove flag to delete them (except the default player).
+    """
+    try:
+        # Query for players that have no associated characters, excluding the default player
+        players_without_characters = Player.query.filter(
+            ~Player.characters.any(), Player.title != nan_player_name
+        ).all()
+
+        if not players_without_characters:
+            click.echo("No dummy players found (excluding default player).")
+            return
+
+        # All players in the list are removable since we already filtered out the default player
+        removable_players = players_without_characters
+
+        if remove:
+            if not removable_players:
+                click.echo("No dummy players to remove.")
+                return
+
+            # Confirm removal
+            click.echo(f"Found {len(removable_players)} dummy player(s) to remove:")
+            for player in removable_players:
+                click.echo(f"  - {player.title} (ID: {player.id})")
+
+            if click.confirm(
+                f"\nAre you sure you want to delete {len(removable_players)} dummy player(s)?"
+            ):
+                removed_count = 0
+                for player in removable_players:
+                    db.session.delete(player)
+                    removed_count += 1
+                    click.echo(f"Removed player: {player.title}")
+
+                db.session.commit()
+                click.echo(f"Successfully removed {removed_count} dummy player(s).")
+            else:
+                click.echo("Operation cancelled.")
+        else:
+            # List mode
+            click.echo(
+                f"Found {len(players_without_characters)} dummy player(s) without associated characters:"
+            )
+            click.echo("-" * 60)
+
+            for player in players_without_characters:
+                joindate_str = (
+                    player.joindate.strftime("%Y-%m-%d %H:%M:%S")
+                    if player.joindate
+                    else "No join date"
+                )
+                mainchar_str = (
+                    player.mainchar.name if player.mainchar else "No main character"
+                )
+
+                click.echo(f"Player ID: {player.id}")
+                click.echo(f"Title: {player.title}")
+                click.echo(f"Join Date: {joindate_str}")
+                click.echo(f"Main Character: {mainchar_str}")
+                click.echo("-" * 60)
+
+            if removable_players:
+                click.echo(
+                    f"\nNote: All {len(removable_players)} player(s) above can be removed with --remove flag."
+                )
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Failed to process dummy players: {str(e)}")

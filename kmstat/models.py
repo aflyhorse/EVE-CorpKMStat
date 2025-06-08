@@ -95,9 +95,7 @@ class Character(db.Model):
         character = cls.query.filter_by(name=character_name).first()
 
         if character:
-            # Character exists, optionally update player association
-            if player_title and character.title != player_title:
-                character.updatePlayer(player_title)
+            # Character exists, do not modify existing character's title or player association
             return character
 
         # Character doesn't exist, create new one
