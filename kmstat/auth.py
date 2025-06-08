@@ -14,6 +14,7 @@ def login():
     if request.method == "POST":
         username = request.form.get("username")
         password = request.form.get("password")
+        remember_me = request.form.get("remember_me") is not None
 
         if not username or not password:
             flash("请输入用户名和密码", "error")
@@ -22,7 +23,7 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and user.check_password(password):
-            login_user(user)
+            login_user(user, remember=remember_me)
             next_page = request.args.get("next")
             return redirect(next_page) if next_page else redirect(url_for("dashboard"))
         else:
