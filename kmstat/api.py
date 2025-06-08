@@ -269,41 +269,47 @@ class API:
             )
             return None
 
-        # Find the first occurrence of the character joining the specified corporation
-        # Corporation history is ordered by record_id (chronological order)
-        for record in data:
-            if record.get("corporation_id") == corporation_id:
-                start_date = record.get("start_date")
-                if start_date:
-                    try:
-                        # Parse the UTC datetime string (format: "2022-05-28T15:09:00Z")
-                        utc_datetime = datetime.fromisoformat(
-                            start_date.replace("Z", "+00:00")
-                        )
+        # Find the oldest occurrence (minimal record_id) of the character joining the specified corporation
+        # Filter all records for the specified corporation
+        corp_records = [
+            record for record in data if record.get("corporation_id") == corporation_id
+        ]
 
-                        # Get local timezone from config
-                        from kmstat.config import config
+        if not corp_records:
+            logging.info(
+                f"Character {character_id} has never been in corporation {corporation_id}"
+            )
+            return None
 
-                        local_datetime = utc_datetime.astimezone(config.localtz)
-
-                        logging.info(
-                            f"Character {character_id} first joined corporation {corporation_id} "
-                            f"on {local_datetime} ({config.localtz})"
-                        )
-                        return local_datetime
-                    except ValueError as e:
-                        logging.error(f"Failed to parse datetime '{start_date}': {e}")
-                        return None
-                else:
-                    logging.warning(
-                        f"Found corporation record but no start_date for character {character_id}"
-                    )
-                    return None
-
-        logging.info(
-            f"Character {character_id} has never been in corporation {corporation_id}"
+        # Find the record with the minimal record_id (oldest join)
+        oldest_record = min(
+            corp_records, key=lambda x: x.get("record_id", float("inf"))
         )
-        return None
+
+        start_date = oldest_record.get("start_date")
+        if start_date:
+            try:
+                # Parse the UTC datetime string (format: "2022-05-28T15:09:00Z")
+                utc_datetime = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+
+                # Get local timezone from config
+                from kmstat.config import config
+
+                local_datetime = utc_datetime.astimezone(config.localtz)
+
+                logging.info(
+                    f"Character {character_id} first joined corporation {corporation_id} "
+                    f"on {local_datetime} ({config.localtz}) (record_id: {oldest_record.get('record_id')})"
+                )
+                return local_datetime
+            except ValueError as e:
+                logging.error(f"Failed to parse datetime '{start_date}': {e}")
+                return None
+        else:
+            logging.warning(
+                f"Found corporation record but no start_date for character {character_id}"
+            )
+            return None
 
 
 # Create a single instance to be used throughout the application
