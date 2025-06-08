@@ -88,22 +88,22 @@
                     <tbody>
                         {% for player_data in summary.player_summary %}
                         <tr>
-                            <td><a href="{{ url_for('search_player', player_id=player_data.player_id) }}" class="text-decoration-none">{{ player_data.player_title }}</a></td>
-                            <td>{{ player_data.main_character or '-' }}</td>
+                            <td><a href="{{ url_for('search_player', player_id=player_data['player_id']) }}" class="text-decoration-none">{{ player_data['player_title'] }}</a></td>
+                            <td>{{ player_data['main_character'] or '-' }}</td>
                             <td>
-                                {% if player_data.status == '合格' %}
-                                    <span class="badge bg-success text-white">{{ player_data.status }}</span>
-                                {% elif player_data.status.startswith('罚款') %}
-                                    <span class="badge bg-danger text-white">{{ player_data.status }}</span>
+                                {% if player_data['status'] == '合格' %}
+                                    <span class="badge bg-success text-white">{{ player_data['status'] }}</span>
+                                {% elif player_data['status'].startswith('罚款') %}
+                                    <span class="badge bg-danger text-white">{{ player_data['status'] }}</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark">{{ player_data.status }}</span>
+                                    <span class="badge bg-warning text-dark">{{ player_data['status'] }}</span>
                                 {% endif %}
                             </td>
-                            <td class="text-end">{{ "{:,.0f}".format(player_data.total_tax) }}</td>
-                            <td class="text-end">{{ "{:,.1f}".format(player_data.total_mining_volume) }}</td>
-                            <td class="text-end">{{ "{:,.0f}".format(player_data.total_income) }}</td>
-                            <td class="text-end">{{ player_data.strategic_pap }}</td>
-                            <td class="text-end">{{ player_data.total_pap }}</td>
+                            <td class="text-end">{{ "{:,.0f}".format(player_data['total_tax']) }}</td>
+                            <td class="text-end">{{ "{:,.1f}".format(player_data['total_mining_volume']) }}</td>
+                            <td class="text-end">{{ "{:,.0f}".format(player_data['total_income']) }}</td>
+                            <td class="text-end">{{ player_data['strategic_pap'] }}</td>
+                            <td class="text-end">{{ player_data['total_pap'] }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

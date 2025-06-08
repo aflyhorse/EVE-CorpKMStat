@@ -414,11 +414,6 @@ class MonthlyUploadService:
         player_summary = list(player_data.values())
         player_summary.sort(key=lambda x: x["total_pap"], reverse=True)
 
-        # Convert to objects for easier template access
-        from types import SimpleNamespace
-
-        player_summary = [SimpleNamespace(**data) for data in player_summary]
-
         return {
             "year": upload.year,
             "month": upload.month,

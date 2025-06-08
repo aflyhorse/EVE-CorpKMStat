@@ -125,7 +125,61 @@
     </div>
 </div>
 
+<!-- Message Modal -->
+<div class="modal fade" id="messageModal" tabindex="-1" aria-labelledby="messageModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="messageModalLabel">消息</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="messageModalBody">
+                <!-- Message content will be inserted here -->
+            </div>
+            <div class="modal-footer" id="messageModalFooter">
+                <button type="button" class="btn btn-primary" id="modalOkBtn" data-bs-dismiss="modal">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// Function to show modal with message
+function showModal(title, message, type = 'info', needsReload = false) {
+    const modal = document.getElementById('messageModal');
+    const modalTitle = document.getElementById('messageModalLabel');
+    const modalBody = document.getElementById('messageModalBody');
+    const modalFooter = document.getElementById('messageModalFooter');
+    
+    modalTitle.textContent = title;
+    modalBody.innerHTML = message;
+    
+    // Add appropriate styling based on type
+    const modalContent = modal.querySelector('.modal-content');
+    modalContent.className = 'modal-content';
+    if (type === 'success') {
+        modalContent.classList.add('border-success');
+        modalTitle.className = 'modal-title text-success';
+    } else if (type === 'danger') {
+        modalContent.classList.add('border-danger');
+        modalTitle.className = 'modal-title text-danger';
+    } else {
+        modalTitle.className = 'modal-title';
+    }
+    
+    // Set up the OK button to reload if needed
+    const okBtn = document.getElementById('modalOkBtn');
+    if (needsReload) {
+        okBtn.onclick = function() {
+            location.reload();
+        };
+    } else {
+        okBtn.onclick = null;
+    }
+    
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+}
 document.getElementById('uploadForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
@@ -168,19 +222,18 @@ function performUpload(formData, uploadBtn, uploadSpinner) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            let message = '上传成功！\\n' + data.message;
+            let message = '上传成功！<br>' + data.message;
             if (data.has_unclaimed) {
-                message += '\\n\\n⚠️ 警告：存在未关联角色！\\n页面刷新后，请点击红色警告链接前往角色认领页面进行关联。';
+                message += '<br><br>⚠️ <strong>警告：存在未关联角色！会导致统计不完全！</strong><br>页面刷新后，请点击红色警告链接前往角色认领页面进行关联。';
             }
-            alert(message);
-            location.reload();
+            showModal('上传成功', message, 'success', true);
         } else {
-            alert('上传失败：' + data.message);
+            showModal('上传失败', '上传失败: ' + data.message, 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('上传时发生错误');
+        showModal('错误', '上传时发生错误', 'danger');
     })
     .finally(() => {
         // Hide loading state
@@ -200,15 +253,14 @@ function deleteUpload(year, month) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(data.message);
-            location.reload();
+            showModal('删除成功', data.message, 'success', true);
         } else {
-            alert('删除失败：' + data.message);
+            showModal('删除失败', '删除失败: ' + data.message, 'danger');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('删除时发生错误');
+        showModal('错误', '删除时发生错误', 'danger');
     });
 }
 </script>
