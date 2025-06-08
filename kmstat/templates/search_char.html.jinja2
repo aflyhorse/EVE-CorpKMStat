@@ -47,7 +47,10 @@
                                     value="{{ end_date if end_date }}">
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">查询</button>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <button type="submit" class="btn btn-primary">查询</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="submitAndOpenEVEWho()" id="evewhoBtn" style="display: none;">EVEWho</button>
+                        </div>
                     </form>
                 </div>
             </div>
@@ -179,6 +182,40 @@
 
         // Add sorted rows
         rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Show/hide EVEWho button based on character selection
+    document.addEventListener('DOMContentLoaded', function() {
+        const characterSelect = document.getElementById('character');
+        const evewhoBtn = document.getElementById('evewhoBtn');
+        
+        function toggleEVEWhoButton() {
+            if (characterSelect.value) {
+                evewhoBtn.style.display = 'block';
+            } else {
+                evewhoBtn.style.display = 'none';
+            }
+        }
+        
+        // Show button if character is already selected on page load
+        toggleEVEWhoButton();
+        
+        // Show/hide button when selection changes
+        characterSelect.addEventListener('change', toggleEVEWhoButton);
+    });
+
+    function submitAndOpenEVEWho() {
+        const characterSelect = document.getElementById('character');
+        const selectedCharacterId = characterSelect.value;
+        
+        if (selectedCharacterId) {
+            // Open EVEWho in new tab
+            window.open('https://evewho.com/character/' + selectedCharacterId, '_blank');
+            
+            // Submit the form to refresh the page with selected character data
+            const form = characterSelect.closest('form');
+            form.submit();
+        }
     }
 </script>
 {% endblock %}

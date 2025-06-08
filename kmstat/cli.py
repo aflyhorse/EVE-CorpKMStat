@@ -292,12 +292,20 @@ def updateplayer(char: str, title=nan_player_name):
     Update the player for a character based on title.
     First updates the character's title, then associates with a player.
     Will create a new player if none exists with the given title.
+    Updates join dates for both old and new players when moving characters.
     """
     try:
         character = Character.query.filter_by(name=char).first()
         if character:
+            # Store the old player reference before updating
+            old_player = character.player
+
             if character.updatePlayer(title):
                 click.echo(f"Updated player for {char} with title '{character.title}'")
+
+                # Update join date for the old player if it exists and is different
+                if old_player and old_player != character.player:
+                    _update_old_player_join_date(old_player)
             else:
                 click.echo(f"Failed to update player for {char}")
         else:
@@ -305,6 +313,46 @@ def updateplayer(char: str, title=nan_player_name):
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error updating player: {e}")
+
+
+def _update_old_player_join_date(old_player):
+    """
+    Update the old player's join date after a character has been moved.
+    Recalculates the join date based on remaining characters.
+    """
+    try:
+        # Get all remaining characters for the old player that have join dates
+        characters_with_dates = [
+            c for c in old_player.characters if c.joindate is not None
+        ]
+
+        if characters_with_dates:
+            # Find the earliest join date among remaining characters
+            earliest_date = min(c.joindate for c in characters_with_dates)
+            old_join_date = old_player.joindate
+
+            if old_join_date != earliest_date:
+                old_player.joindate = earliest_date
+                db.session.add(old_player)
+                click.echo(
+                    f"Info: Updated old player {old_player.title} join date to {earliest_date}"
+                )
+            else:
+                click.echo(f"Info: Old player {old_player.title} join date unchanged")
+        else:
+            # No characters with join dates remaining, set to None or keep existing
+            if old_player.joindate is not None:
+                old_player.joindate = None
+                db.session.add(old_player)
+                click.echo(
+                    f"Info: Cleared join date for old player {old_player.title} (no characters with dates)"
+                )
+
+        # Update main character for old player
+        old_player.update_main_character()
+
+    except Exception as e:
+        click.echo(f"Warning: Error updating old player join date: {str(e)}")
 
 
 @app.cli.command()
