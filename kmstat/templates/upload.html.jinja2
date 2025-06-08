@@ -219,8 +219,19 @@ function performUpload(formData, uploadBtn, uploadSpinner) {
         method: 'POST',
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        console.log('Response ok:', response.ok);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    })
     .then(data => {
+        console.log('Upload response data:', data);
         if (data.success) {
             let message = '上传成功！<br>' + data.message;
             if (data.has_unclaimed) {
@@ -232,8 +243,16 @@ function performUpload(formData, uploadBtn, uploadSpinner) {
         }
     })
     .catch(error => {
-        console.error('Error:', error);
-        showModal('错误', '上传时发生错误', 'danger');
+        console.error('Upload error details:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
+        let errorMessage = '上传时发生错误';
+        if (error.message) {
+            errorMessage += ': ' + error.message;
+        }
+        showModal('错误', errorMessage, 'danger');
     })
     .finally(() => {
         // Hide loading state

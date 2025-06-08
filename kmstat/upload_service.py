@@ -3,9 +3,11 @@ Service for handling monthly Excel file uploads.
 """
 
 import pandas as pd
+import os
 from datetime import datetime
 from flask import current_app
 from kmstat import db
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from kmstat.models import (
     MonthlyUpload,
     PAPRecord,
@@ -60,12 +62,20 @@ class MonthlyUploadService:
             raise UploadError(f"Data for {year}-{month:02d} already exists")
 
         try:
+            current_app.logger.info(f"Starting Excel file processing: {file_path}")
+            current_app.logger.info(f"File size: {os.path.getsize(file_path)} bytes")
+
             # If overwriting, delete existing data first
             if existing and overwrite:
+                current_app.logger.info(
+                    f"Deleting existing data for {year}-{month:02d}"
+                )
                 MonthlyUploadService.delete_upload(year, month)
 
             # Read Excel file
+            current_app.logger.info("Reading Excel file...")
             excel_data = pd.read_excel(file_path, sheet_name=None)
+            current_app.logger.info(f"Excel sheets found: {list(excel_data.keys())}")
 
             # Validate required sheets
             required_sheets = ["PAP", "赏金", "挖矿"]
@@ -77,7 +87,12 @@ class MonthlyUploadService:
                     f"Missing required sheets: {', '.join(missing_sheets)}"
                 )
 
+            current_app.logger.info(
+                "All required sheets found, proceeding with data processing"
+            )
+
             # Create upload record
+            current_app.logger.info("Creating upload record...")
             upload = MonthlyUpload(
                 year=year,
                 month=month,
@@ -88,19 +103,188 @@ class MonthlyUploadService:
             )
             db.session.add(upload)
             db.session.flush()  # Get the ID
+            current_app.logger.info(f"Upload record created with ID: {upload.id}")
 
-            # Process each sheet
-            pap_count = MonthlyUploadService._process_pap_sheet(
-                excel_data["PAP"], upload
-            )
-            bounty_count = MonthlyUploadService._process_bounty_sheet(
-                excel_data["赏金"], upload
-            )
-            mining_count = MonthlyUploadService._process_mining_sheet(
-                excel_data["挖矿"], upload
-            )
-
+            # Commit the upload record so it's visible to other sessions/threads
             db.session.commit()
+            current_app.logger.info("Upload record committed to database")
+
+            # Process each sheet concurrently
+            current_app.logger.info("Starting concurrent sheet processing...")
+
+            try:
+                # Get the current Flask app instance to pass to threads
+                app_instance = current_app._get_current_object()
+
+                def process_sheet_with_session(sheet_name, sheet_data, upload_id):
+                    """Process a sheet in a separate thread with its own database session."""
+                    thread_session = None
+                    try:
+                        # Push a new application context for this thread
+                        with app_instance.app_context():
+                            # Import within the context to ensure proper setup
+                            from sqlalchemy.orm import sessionmaker
+                            from kmstat import db as main_db
+                            from flask import current_app as thread_app
+
+                            # Create a new session bound to the same engine
+                            Session = sessionmaker(bind=main_db.engine)
+                            thread_session = Session()
+
+                            # Get the upload object in this thread's session
+                            thread_upload = thread_session.query(MonthlyUpload).get(
+                                upload_id
+                            )
+                            if not thread_upload:
+                                raise UploadError(
+                                    f"Upload record not found for ID {upload_id}"
+                                )
+
+                            # Log within the app context
+                            thread_app.logger.info(
+                                f"Processing {sheet_name} sheet in thread..."
+                            )
+
+                            # Process the sheet with the thread's session
+                            if sheet_name == "PAP":
+                                count = MonthlyUploadService._process_pap_sheet_with_session(
+                                    sheet_data, thread_upload, thread_session
+                                )
+                            elif sheet_name == "赏金":
+                                count = MonthlyUploadService._process_bounty_sheet_with_session(
+                                    sheet_data, thread_upload, thread_session
+                                )
+                            elif sheet_name == "挖矿":
+                                count = MonthlyUploadService._process_mining_sheet_with_session(
+                                    sheet_data, thread_upload, thread_session
+                                )
+                            else:
+                                raise UploadError(f"Unknown sheet type: {sheet_name}")
+
+                            # Commit this thread's session
+                            thread_session.commit()
+                            thread_app.logger.info(
+                                f"{sheet_name} sheet processed: {count} records"
+                            )
+
+                            return sheet_name, count
+
+                    except Exception as e:
+                        if thread_session:
+                            try:
+                                thread_session.rollback()
+                            except:
+                                pass
+
+                        # Log the error - try different approaches for logging
+                        error_msg = f"Error processing {sheet_name} sheet: {str(e)}"
+                        try:
+                            # Try to use app context logging
+                            with app_instance.app_context():
+                                from flask import current_app as thread_app
+
+                                thread_app.logger.error(error_msg, exc_info=True)
+                        except:
+                            # Fallback to stderr if logging fails
+                            import sys
+
+                            print(error_msg, file=sys.stderr)
+
+                        raise UploadError(error_msg)
+                    finally:
+                        if thread_session:
+                            try:
+                                thread_session.close()
+                            except:
+                                pass
+
+                # Use ThreadPoolExecutor to process sheets concurrently
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    # Submit all sheet processing tasks
+                    future_to_sheet = {
+                        executor.submit(
+                            process_sheet_with_session,
+                            "PAP",
+                            excel_data["PAP"],
+                            upload.id,
+                        ): "PAP",
+                        executor.submit(
+                            process_sheet_with_session,
+                            "赏金",
+                            excel_data["赏金"],
+                            upload.id,
+                        ): "赏金",
+                        executor.submit(
+                            process_sheet_with_session,
+                            "挖矿",
+                            excel_data["挖矿"],
+                            upload.id,
+                        ): "挖矿",
+                    }
+
+                    # Collect results as they complete
+                    pap_count = bounty_count = mining_count = 0
+                    for future in as_completed(future_to_sheet):
+                        sheet_type = future_to_sheet[future]
+                        try:
+                            sheet_name, count = future.result()
+                            if sheet_name == "PAP":
+                                pap_count = count
+                            elif sheet_name == "赏金":
+                                bounty_count = count
+                            elif sheet_name == "挖矿":
+                                mining_count = count
+                        except Exception as e:
+                            current_app.logger.error(
+                                f"Sheet processing failed for {sheet_type}: {str(e)}"
+                            )
+                            raise e
+
+                current_app.logger.info(
+                    "All sheets processed successfully with concurrent processing"
+                )
+
+            except Exception as e:
+                current_app.logger.warning(
+                    f"Concurrent processing failed: {str(e)}, falling back to sequential processing"
+                )
+
+                # Fallback to sequential processing
+                current_app.logger.info("Processing PAP sheet (sequential fallback)...")
+                pap_count = MonthlyUploadService._process_pap_sheet(
+                    excel_data["PAP"], upload
+                )
+                current_app.logger.info(f"PAP sheet processed: {pap_count} records")
+
+                current_app.logger.info(
+                    "Processing bounty sheet (sequential fallback)..."
+                )
+                bounty_count = MonthlyUploadService._process_bounty_sheet(
+                    excel_data["赏金"], upload
+                )
+                current_app.logger.info(
+                    f"Bounty sheet processed: {bounty_count} records"
+                )
+
+                current_app.logger.info(
+                    "Processing mining sheet (sequential fallback)..."
+                )
+                mining_count = MonthlyUploadService._process_mining_sheet(
+                    excel_data["挖矿"], upload
+                )
+                current_app.logger.info(
+                    f"Mining sheet processed: {mining_count} records"
+                )
+
+                current_app.logger.info(
+                    "All sheets processed successfully with sequential fallback"
+                )
+
+            # Commit the main transaction (upload record already created)
+            current_app.logger.info("Committing main database transaction...")
+            # The individual sheet transactions were already committed in their threads
+            # We just need to refresh the upload object to see the related records
+            db.session.refresh(upload)
 
             current_app.logger.info(
                 f"Successfully uploaded {year}-{month:02d}: "
@@ -111,7 +295,23 @@ class MonthlyUploadService:
             return upload
 
         except Exception as e:
-            db.session.rollback()
+            current_app.logger.error(
+                f"Error during upload processing: {str(e)}", exc_info=True
+            )
+            # Since we committed the upload early, we need to clean it up on error
+            try:
+                # Remove the upload record and any related records that might have been created
+                db.session.delete(upload)
+                db.session.commit()
+                current_app.logger.info(
+                    "Cleaned up upload record due to processing error"
+                )
+            except Exception as cleanup_error:
+                current_app.logger.error(
+                    f"Error cleaning up upload record: {cleanup_error}"
+                )
+                db.session.rollback()
+
             if isinstance(e, UploadError):
                 raise
             else:
@@ -142,8 +342,27 @@ class MonthlyUploadService:
                 float(row["战略PAP"]) if not pd.isna(row["战略PAP"]) else 0.0
             )
 
-            # Find or create character with player association
-            character = Character.find_or_create_by_name(character_name, player_title)
+            # Find or create character with player association (no API calls)
+            character = (
+                db.session.query(Character).filter_by(name=character_name).first()
+            )
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from kmstat.models import Player
+
+                # Find or create player
+                player = db.session.query(Player).filter_by(title=player_title).first()
+                if not player:
+                    player = Player(title=player_title)
+                    db.session.add(player)
+                    db.session.flush()
+
+                # Create character with minimal info (no API call or ESI validation)
+                character = Character(
+                    name=character_name, title=player_title, player=player
+                )
+                db.session.add(character)
+                db.session.flush()
 
             pap_record = PAPRecord(
                 upload=upload,
@@ -179,8 +398,27 @@ class MonthlyUploadService:
             character_name = str(row["名字"]).strip()
             tax_isk = float(row["纳税(isk)"])
 
-            # Find or create character (no player title provided in bounty sheet)
-            character = Character.find_or_create_by_name(character_name)
+            # Find or create character (no player title provided in bounty sheet, no API calls)
+            character = (
+                db.session.query(Character).filter_by(name=character_name).first()
+            )
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from kmstat.models import Player
+
+                # Associate with default player
+                default_player = (
+                    db.session.query(Player).filter_by(title="__查无此人__").first()
+                )
+                if not default_player:
+                    default_player = Player(title="__查无此人__")
+                    db.session.add(default_player)
+                    db.session.flush()
+
+                # Create character with minimal info (no API call)
+                character = Character(name=character_name, player=default_player)
+                db.session.add(character)
+                db.session.flush()
 
             bounty_record = BountyRecord(
                 upload=upload, character=character, tax_isk=tax_isk
@@ -216,21 +454,40 @@ class MonthlyUploadService:
             )
             volume_m3 = float(row["体积(m3)"])
 
-            # Handle character association with player based on main character
-            if main_character_name:
-                # Try to find the main character to get the player title
-                main_char = Character.query.filter_by(name=main_character_name).first()
-                if main_char and main_char.player:
-                    # Associate with the same player as the main character
-                    character = Character.find_or_create_by_name(
-                        character_name, main_char.player.title
+            # Handle character association with player based on main character (no API calls)
+            character = (
+                db.session.query(Character).filter_by(name=character_name).first()
+            )
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from kmstat.models import Player
+
+                player = None
+                if main_character_name:
+                    # Try to find the main character to get the player title
+                    main_char = (
+                        db.session.query(Character)
+                        .filter_by(name=main_character_name)
+                        .first()
                     )
-                else:
-                    # Main character not found or has no player, create without player
-                    character = Character.find_or_create_by_name(character_name)
-            else:
-                # No main character specified, create without player
-                character = Character.find_or_create_by_name(character_name)
+                    if main_char and main_char.player:
+                        # Associate with the same player as the main character
+                        player = main_char.player
+
+                if not player:
+                    # No main character or player found, use default
+                    player = (
+                        db.session.query(Player).filter_by(title="__查无此人__").first()
+                    )
+                    if not player:
+                        player = Player(title="__查无此人__")
+                        db.session.add(player)
+                        db.session.flush()
+
+                # Create character with minimal info (no API call)
+                character = Character(name=character_name, player=player)
+                db.session.add(character)
+                db.session.flush()
 
             mining_record = MiningRecord(
                 upload=upload, character=character, volume_m3=volume_m3
@@ -446,3 +703,187 @@ class MonthlyUploadService:
     def upload_exists(year: int, month: int) -> bool:
         """Check if upload data exists for the given year and month."""
         return MonthlyUpload.query.filter_by(year=year, month=month).first() is not None
+
+    @staticmethod
+    def _process_pap_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process PAP sheet data with a specific database session."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "Title", "PAP", "战略PAP"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(f"PAP sheet missing columns: {', '.join(missing_cols)}")
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["Title"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            player_title = str(row["Title"]).strip()
+            pap_points = float(row["PAP"]) if not pd.isna(row["PAP"]) else 0.0
+            strategic_pap = (
+                float(row["战略PAP"]) if not pd.isna(row["战略PAP"]) else 0.0
+            )
+
+            # Find or create character with player association using the session
+            # Try to find existing character first to avoid API calls in threads
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - for thread safety, create minimal character
+                # without API calls and associate with player
+                from kmstat.models import Player
+
+                # Find or create player
+                player = session.query(Player).filter_by(title=player_title).first()
+                if not player:
+                    player = Player(title=player_title)
+                    session.add(player)
+                    session.flush()
+
+                # Create character with minimal info (no API call or ESI validation)
+                # Note: We don't set an explicit ID since SQLAlchemy will auto-generate it
+                character = Character(
+                    name=character_name, title=player_title, player=player
+                )
+                session.add(character)
+                session.flush()
+
+            pap_record = PAPRecord(
+                upload=upload,
+                character=character,
+                pap_points=pap_points,
+                strategic_pap_points=strategic_pap,
+            )
+            session.add(pap_record)
+            count += 1
+
+        return count
+
+    @staticmethod
+    def _process_bounty_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process bounty sheet data with a specific database session."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "纳税(isk)"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(
+                f"Bounty sheet missing columns: {', '.join(missing_cols)}"
+            )
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["纳税(isk)"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            tax_isk = float(row["纳税(isk)"])
+
+            # Find or create character (no player title provided in bounty sheet)
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from kmstat.models import Player
+
+                # Associate with default player
+                default_player = (
+                    session.query(Player).filter_by(title="__查无此人__").first()
+                )
+                if not default_player:
+                    default_player = Player(title="__查无此人__")
+                    session.add(default_player)
+                    session.flush()
+
+                # Create character with minimal info (no API call)
+                character = Character(name=character_name, player=default_player)
+                session.add(character)
+                session.flush()
+
+            bounty_record = BountyRecord(
+                upload=upload, character=character, tax_isk=tax_isk
+            )
+            session.add(bounty_record)
+            count += 1
+
+        return count
+
+    @staticmethod
+    def _process_mining_sheet_with_session(
+        df: pd.DataFrame, upload: MonthlyUpload, session
+    ) -> int:
+        """Process mining sheet data with a specific database session."""
+        if df.empty:
+            return 0
+
+        # Validate columns
+        expected_cols = ["名字", "主人物", "体积(m3)"]
+        missing_cols = [col for col in expected_cols if col not in df.columns]
+        if missing_cols:
+            raise UploadError(
+                f"Mining sheet missing columns: {', '.join(missing_cols)}"
+            )
+
+        count = 0
+        for _, row in df.iterrows():
+            # Skip rows with missing essential data
+            if pd.isna(row["名字"]) or pd.isna(row["体积(m3)"]):
+                continue
+
+            character_name = str(row["名字"]).strip()
+            main_character_name = (
+                str(row["主人物"]).strip() if not pd.isna(row["主人物"]) else ""
+            )
+            volume_m3 = float(row["体积(m3)"])
+
+            # Find or create character
+            character = session.query(Character).filter_by(name=character_name).first()
+            if not character:
+                # Character doesn't exist - create minimal character without API calls
+                from kmstat.models import Player
+
+                player = None
+                # Handle character association with player based on main character
+                if main_character_name:
+                    # Try to find the main character to get the player title
+                    main_char = (
+                        session.query(Character)
+                        .filter_by(name=main_character_name)
+                        .first()
+                    )
+                    if main_char and main_char.player:
+                        # Associate with the same player as the main character
+                        player = main_char.player
+
+                if not player:
+                    # No main character or player found, use default
+                    player = (
+                        session.query(Player).filter_by(title="__查无此人__").first()
+                    )
+                    if not player:
+                        player = Player(title="__查无此人__")
+                        session.add(player)
+                        session.flush()
+
+                # Create character with minimal info (no API call)
+                character = Character(name=character_name, player=player)
+                session.add(character)
+                session.flush()
+
+            mining_record = MiningRecord(
+                upload=upload, character=character, volume_m3=volume_m3
+            )
+            session.add(mining_record)
+            count += 1
+
+        return count

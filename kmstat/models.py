@@ -191,6 +191,123 @@ class Character(db.Model):
 
         return character
 
+    @classmethod
+    def find_or_create_by_name_with_session(
+        cls, character_name: str, player_title: str = None, session=None
+    ) -> "Character":
+        """
+        Session-aware version of find_or_create_by_name for concurrent processing.
+        Find an existing character by name, or create a new one.
+        If player_title is provided, associate the character with that player.
+        Uses the provided session instead of the default db.session.
+        """
+        if session is None:
+            raise ValueError("Session is required for thread-safe operation")
+
+        # First, try to find existing character by name
+        character = session.query(cls).filter_by(name=character_name).first()
+
+        if character:
+            # Character exists, do not modify existing character's title or player association
+            return character
+
+        # Character doesn't exist, create new one
+        # Try to get character info from API first
+        from kmstat.api import api
+
+        # First get character ID by name
+        character_id = api.get_character_id_by_name(character_name)
+
+        if character_id:
+            # Character found in API, get full character data
+            character = api.get_character(character_id)
+            if not character:
+                # Fallback if get_character fails but we have ID
+                character = cls(id=character_id, name=character_name)
+        else:
+            # Character not found in API, report failure instead of creating
+            from kmstat.upload_service import UploadError
+
+            raise UploadError(
+                f"Character '{character_name}' not found in EVE Online ESI"
+            )
+
+        # Associate with player - every character must have a player
+        if player_title:
+            # Determine the best title to use for player association
+            final_player_title = player_title  # Default to imported title
+
+            # If we got character from ESI and it has a title, prefer ESI title
+            if hasattr(character, "title") and character.title:
+                final_player_title = character.title
+
+            # Try to find existing player by the final title using session
+            player = session.query(Player).filter_by(title=final_player_title).first()
+            if not player:
+                # If no player found with ESI title, also check with imported title
+                if final_player_title != player_title:
+                    player = session.query(Player).filter_by(title=player_title).first()
+
+                if not player:
+                    # Create new player with the best available title
+                    player = Player(title=final_player_title)
+                    session.add(player)
+                    session.flush()
+
+            # Update character title to match the player title used
+            character.title = final_player_title
+            character.player = player
+
+            # Add character to session before setting as main character
+            session.add(character)
+            session.flush()
+
+            # Set as main character if player has no main character
+            if not player.mainchar:
+                player.mainchar = character
+        else:
+            # No player title provided, check if character has ESI title
+            if hasattr(character, "title") and character.title:
+                # Use ESI title as player title
+                final_player_title = character.title
+
+                # Try to find existing player using session
+                player = (
+                    session.query(Player).filter_by(title=final_player_title).first()
+                )
+                if not player:
+                    # Create new player with ESI title
+                    player = Player(title=final_player_title)
+                    session.add(player)
+                    session.flush()
+
+                character.player = player
+
+                # Add character to session before setting as main character
+                session.add(character)
+                session.flush()
+
+                # Set as main character if player has no main character
+                if not player.mainchar:
+                    player.mainchar = character
+            else:
+                # No title available, associate with default "查无此人" player
+                default_player = (
+                    session.query(Player).filter_by(title="__查无此人__").first()
+                )
+                if not default_player:
+                    # Create the default player if it doesn't exist
+                    default_player = Player(title="__查无此人__")
+                    session.add(default_player)
+                    session.flush()
+
+                character.player = default_player
+                # Add character to session
+                session.add(character)
+                session.flush()
+
+        return character
+
     def updatePlayer(self, title: str = None) -> bool:
         """
         Update the character's player based on title.

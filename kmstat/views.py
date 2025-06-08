@@ -381,15 +381,22 @@ def upload_monthly_data():
 
     # Handle POST request
     try:
+        app.logger.info(f"Upload request received from user {current_user.username}")
+        app.logger.info(f"Request files: {list(request.files.keys())}")
+        app.logger.info(f"Request form: {dict(request.form)}")
+
         # Validate form data
         if "file" not in request.files:
+            app.logger.error("No file in request")
             return jsonify({"success": False, "message": "没有选择文件"})
 
         file = request.files["file"]
         if file.filename == "":
+            app.logger.error("Empty filename")
             return jsonify({"success": False, "message": "没有选择文件"})
 
         if not file.filename.endswith((".xlsx", ".xls")):
+            app.logger.error(f"Invalid file extension: {file.filename}")
             return jsonify(
                 {"success": False, "message": "文件格式必须是Excel (.xlsx或.xls)"}
             )
@@ -400,22 +407,37 @@ def upload_monthly_data():
         ore_convert_rate = request.form.get("ore_convert_rate", type=float)
         overwrite = request.form.get("overwrite") == "true"
 
+        app.logger.info(
+            f"Form data parsed: year={year}, month={month}, tax_rate={tax_rate}, ore_convert_rate={ore_convert_rate}, overwrite={overwrite}"
+        )
+
         if not all([year, month, tax_rate is not None, ore_convert_rate is not None]):
+            app.logger.error("Missing required fields")
             return jsonify({"success": False, "message": "请填写所有必需字段"})
 
         if not (1 <= month <= 12):
+            app.logger.error(f"Invalid month: {month}")
             return jsonify({"success": False, "message": "月份必须在1-12之间"})
 
         if tax_rate < 0 or tax_rate > 1:
+            app.logger.error(f"Invalid tax rate: {tax_rate}")
             return jsonify({"success": False, "message": "税率必须在0-1之间"})
 
         # Save uploaded file temporarily
         filename = secure_filename(file.filename)
         temp_path = os.path.join(app.instance_path, "temp", filename)
+        app.logger.info(f"Temporary file path: {temp_path}")
+
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        app.logger.info(f"Created temp directory: {os.path.dirname(temp_path)}")
+
         file.save(temp_path)
+        app.logger.info(
+            f"File saved to: {temp_path}, size: {os.path.getsize(temp_path)} bytes"
+        )
 
         try:
+            app.logger.info("Starting file processing...")
             # Process the upload
             upload = MonthlyUploadService.process_excel_upload(
                 temp_path,
@@ -426,29 +448,39 @@ def upload_monthly_data():
                 current_user,
                 overwrite,
             )
+            app.logger.info(
+                f"Upload processing completed successfully for {year}-{month:02d}"
+            )
 
+            app.logger.info("Generating upload summary...")
             summary = MonthlyUploadService.get_upload_summary(upload)
+            app.logger.info("Upload summary generated successfully")
 
             # Check for unclaimed characters after upload
+            app.logger.info("Checking for unclaimed characters...")
             has_unclaimed = has_unclaimed_characters()
+            app.logger.info(f"Unclaimed characters check completed: {has_unclaimed}")
 
-            return jsonify(
-                {
-                    "success": True,
-                    "message": f"成功上传 {year}-{month:02d} 数据",
-                    "summary": summary,
-                    "has_unclaimed": has_unclaimed,
-                }
-            )
+            response_data = {
+                "success": True,
+                "message": f"成功上传 {year}-{month:02d} 数据",
+                "summary": summary,
+                "has_unclaimed": has_unclaimed,
+            }
+            app.logger.info("Upload completed successfully, returning response")
+            return jsonify(response_data)
 
         finally:
             # Clean up temporary file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
+                app.logger.info(f"Cleaned up temporary file: {temp_path}")
 
     except UploadError as e:
+        app.logger.error(f"Upload error: {str(e)}", exc_info=True)
         return jsonify({"success": False, "message": str(e)})
     except Exception as e:
+        app.logger.error(f"Unexpected error during upload: {str(e)}", exc_info=True)
         return jsonify({"success": False, "message": f"上传失败: {str(e)}"})
 
 
