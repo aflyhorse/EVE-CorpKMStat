@@ -21,9 +21,37 @@ def retry_with_backoff(max_retries=3, initial_delay=1):
             for retry in range(max_retries):
                 try:
                     return func(*args, **kwargs)
+                except requests.HTTPError as e:
+                    last_exception = e
+                    # Check for 420 Error Limited status code
+                    if (
+                        hasattr(e, "response")
+                        and e.response is not None
+                        and e.response.status_code == 420
+                    ):
+                        if retry < max_retries - 1:
+                            logging.warning(
+                                f"ESI API rate limited (420), waiting 60 seconds before retry {retry + 1}/{max_retries}"
+                            )
+                            time.sleep(60)  # Wait 60 seconds for rate limit
+                        else:
+                            logging.error(
+                                f"ESI API rate limited (420), exhausted all {max_retries} retries"
+                            )
+                    else:
+                        # For other HTTP errors, use exponential backoff
+                        if retry < max_retries - 1:
+                            logging.warning(
+                                f"HTTP error {e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'}, retrying in {delay} seconds"
+                            )
+                            time.sleep(delay)
+                            delay *= 2  # Exponential backoff
                 except (requests.RequestException, ValueError) as e:
                     last_exception = e
                     if retry < max_retries - 1:  # Don't sleep on the last iteration
+                        logging.warning(
+                            f"Request error: {str(e)}, retrying in {delay} seconds"
+                        )
                         time.sleep(delay)
                         delay *= 2  # Exponential backoff
 
@@ -71,7 +99,13 @@ class API:
         Makes a rate-limited request using the session.
         """
         self._enforce_rate_limit()
-        return self.session.request(method, url, **kwargs)
+        response = self.session.request(method, url, **kwargs)
+
+        # Check for 420 Error Limited and raise HTTPError to trigger retry logic
+        if response.status_code == 420:
+            raise requests.HTTPError(f"420 Error Limited", response=response)
+
+        return response
 
     @retry_with_backoff()
     def get_alliance_id(self, corporation_id) -> Optional[int]:

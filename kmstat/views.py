@@ -303,7 +303,7 @@ def associate_character(character_id):
     )
 
     return render_template(
-        "associate_character.html.jinja2", character=character, players=players
+        "associate_character.html.jinja2", character=character, players=players, config=config
     )
 
 
@@ -377,6 +377,7 @@ def upload_monthly_data():
             default_tax_rate=default_tax_rate,
             default_ore_convert_rate=default_ore_convert_rate,
             has_unclaimed=has_unclaimed,
+            config=config,
         )
 
     # Handle POST request
@@ -504,7 +505,7 @@ def view_upload_summary(year, month):
     """View summary of uploaded data."""
     upload = MonthlyUpload.query.filter_by(year=year, month=month).first_or_404()
     summary = MonthlyUploadService.get_upload_summary(upload)
-    return render_template("upload_summary.html.jinja2", upload=upload, summary=summary)
+    return render_template("upload_summary.html.jinja2", upload=upload, summary=summary, config=config)
 
 
 @app.route("/download-template")
