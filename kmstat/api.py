@@ -42,7 +42,9 @@ def retry_with_backoff(max_retries=3, initial_delay=1):
                         # For other HTTP errors, use exponential backoff
                         if retry < max_retries - 1:
                             logging.warning(
-                                f"HTTP error {e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'}, retrying in {delay} seconds"
+                                "HTTP error "
+                                + f"{e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'}"
+                                + f", retrying in {delay} seconds"
                             )
                             time.sleep(delay)
                             delay *= 2  # Exponential backoff
@@ -103,7 +105,7 @@ class API:
 
         # Check for 420 Error Limited and raise HTTPError to trigger retry logic
         if response.status_code == 420:
-            raise requests.HTTPError(f"420 Error Limited", response=response)
+            raise requests.HTTPError("420 Error Limited", response=response)
 
         return response
 

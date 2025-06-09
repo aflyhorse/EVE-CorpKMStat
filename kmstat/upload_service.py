@@ -4,7 +4,6 @@ Service for handling monthly Excel file uploads.
 
 import pandas as pd
 import os
-import sys
 from datetime import datetime
 from flask import current_app
 from kmstat import db
@@ -372,7 +371,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -439,7 +437,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -519,7 +516,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -1017,7 +1013,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -1086,7 +1081,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -1168,7 +1162,6 @@ class MonthlyUploadService:
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
-                import hashlib
                 import time
 
                 name_hash = abs(hash(character_name)) % 10000
@@ -1205,187 +1198,3 @@ class MonthlyUploadService:
     def upload_exists(year: int, month: int) -> bool:
         """Check if upload data exists for the given year and month."""
         return MonthlyUpload.query.filter_by(year=year, month=month).first() is not None
-
-    @staticmethod
-    def _process_pap_sheet_with_session(
-        df: pd.DataFrame, upload: MonthlyUpload, session
-    ) -> int:
-        """Process PAP sheet data with a specific database session."""
-        if df.empty:
-            return 0
-
-        # Validate columns
-        expected_cols = ["名字", "Title", "PAP", "战略PAP"]
-        missing_cols = [col for col in expected_cols if col not in df.columns]
-        if missing_cols:
-            raise UploadError(f"PAP sheet missing columns: {', '.join(missing_cols)}")
-
-        count = 0
-        for _, row in df.iterrows():
-            # Skip rows with missing essential data
-            if pd.isna(row["名字"]) or pd.isna(row["Title"]):
-                continue
-
-            character_name = str(row["名字"]).strip()
-            player_title = str(row["Title"]).strip()
-            pap_points = float(row["PAP"]) if not pd.isna(row["PAP"]) else 0.0
-            strategic_pap = (
-                float(row["战略PAP"]) if not pd.isna(row["战略PAP"]) else 0.0
-            )
-
-            # Find or create character with player association using the session
-            # Try to find existing character first to avoid API calls in threads
-            character = session.query(Character).filter_by(name=character_name).first()
-            if not character:
-                # Character doesn't exist - for thread safety, create minimal character
-                # without API calls and associate with player
-                from kmstat.models import Player
-
-                # Find or create player
-                player = session.query(Player).filter_by(title=player_title).first()
-                if not player:
-                    player = Player(title=player_title)
-                    session.add(player)
-                    session.flush()
-
-                # Create character with minimal info (no API call or ESI validation)
-                # Note: We don't set an explicit ID since SQLAlchemy will auto-generate it
-                character = Character(
-                    name=character_name, title=player_title, player=player
-                )
-                session.add(character)
-                session.flush()
-
-            pap_record = PAPRecord(
-                upload=upload,
-                character=character,
-                pap_points=pap_points,
-                strategic_pap_points=strategic_pap,
-            )
-            session.add(pap_record)
-            count += 1
-
-        return count
-
-    @staticmethod
-    def _process_bounty_sheet_with_session(
-        df: pd.DataFrame, upload: MonthlyUpload, session
-    ) -> int:
-        """Process bounty sheet data with a specific database session."""
-        if df.empty:
-            return 0
-
-        # Validate columns
-        expected_cols = ["名字", "纳税(isk)"]
-        missing_cols = [col for col in expected_cols if col not in df.columns]
-        if missing_cols:
-            raise UploadError(
-                f"Bounty sheet missing columns: {', '.join(missing_cols)}"
-            )
-
-        count = 0
-        for _, row in df.iterrows():
-            # Skip rows with missing essential data
-            if pd.isna(row["名字"]) or pd.isna(row["纳税(isk)"]):
-                continue
-
-            character_name = str(row["名字"]).strip()
-            tax_isk = float(row["纳税(isk)"])
-
-            # Find or create character (no player title provided in bounty sheet)
-            character = session.query(Character).filter_by(name=character_name).first()
-            if not character:
-                # Character doesn't exist - create minimal character without API calls
-                from kmstat.models import Player
-
-                # Associate with default player
-                default_player = (
-                    session.query(Player).filter_by(title="__查无此人__").first()
-                )
-                if not default_player:
-                    default_player = Player(title="__查无此人__")
-                    session.add(default_player)
-                    session.flush()
-
-                # Create character with minimal info (no API call)
-                character = Character(name=character_name, player=default_player)
-                session.add(character)
-                session.flush()
-
-            bounty_record = BountyRecord(
-                upload=upload, character=character, tax_isk=tax_isk
-            )
-            session.add(bounty_record)
-            count += 1
-
-        return count
-
-    @staticmethod
-    def _process_mining_sheet_with_session(
-        df: pd.DataFrame, upload: MonthlyUpload, session
-    ) -> int:
-        """Process mining sheet data with a specific database session."""
-        if df.empty:
-            return 0
-
-        # Validate columns
-        expected_cols = ["名字", "主人物", "体积(m3)"]
-        missing_cols = [col for col in expected_cols if col not in df.columns]
-        if missing_cols:
-            raise UploadError(
-                f"Mining sheet missing columns: {', '.join(missing_cols)}"
-            )
-
-        count = 0
-        for _, row in df.iterrows():
-            # Skip rows with missing essential data
-            if pd.isna(row["名字"]) or pd.isna(row["体积(m3)"]):
-                continue
-
-            character_name = str(row["名字"]).strip()
-            main_character_name = (
-                str(row["主人物"]).strip() if not pd.isna(row["主人物"]) else ""
-            )
-            volume_m3 = float(row["体积(m3)"])
-
-            # Find or create character
-            character = session.query(Character).filter_by(name=character_name).first()
-            if not character:
-                # Character doesn't exist - create minimal character without API calls
-                from kmstat.models import Player
-
-                player = None
-                # Handle character association with player based on main character
-                if main_character_name:
-                    # Try to find the main character to get the player title
-                    main_char = (
-                        session.query(Character)
-                        .filter_by(name=main_character_name)
-                        .first()
-                    )
-                    if main_char and main_char.player:
-                        # Associate with the same player as the main character
-                        player = main_char.player
-
-                if not player:
-                    # No main character or player found, use default
-                    player = (
-                        session.query(Player).filter_by(title="__查无此人__").first()
-                    )
-                    if not player:
-                        player = Player(title="__查无此人__")
-                        session.add(player)
-                        session.flush()
-
-                # Create character with minimal info (no API call)
-                character = Character(name=character_name, player=player)
-                session.add(character)
-                session.flush()
-
-            mining_record = MiningRecord(
-                upload=upload, character=character, volume_m3=volume_m3
-            )
-            session.add(mining_record)
-            count += 1
-
-        return count
