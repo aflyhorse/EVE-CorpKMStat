@@ -154,7 +154,7 @@ class API:
             character = Character(
                 id=character_id,
                 name=character_data.get("name"),
-                title=character_data.get("title"),
+                title=character_data.get("title", "").strip(),
             )
 
             # Try to get the corporation join date
