@@ -506,11 +506,20 @@ def updatejoindate():
             )
 
             if join_date:
-                # Only update if the join date is different
-                if character.joindate != join_date:
-                    character.joindate = join_date
+                # Normalize timezones for comparison - convert API date to naive datetime
+                if join_date.tzinfo is not None:
+                    join_date_naive = join_date.replace(tzinfo=None)
+                else:
+                    join_date_naive = join_date
+
+                # Only update if the join date is different (comparing naive datetimes)
+                if character.joindate != join_date_naive:
+                    character.joindate = join_date_naive
                     db.session.add(character)
                     updated_characters += 1
+                    click.echo(
+                        f"Info: Updated {character.name} join date to {join_date_naive}"
+                    )
             else:
                 failed_characters += 1
                 click.echo(f"Warning: Could not get join date for {character.name}")
@@ -545,6 +554,9 @@ def updatejoindate():
                     player.joindate = earliest_date
                     db.session.add(player)
                     updated_players += 1
+                    click.echo(
+                        f"Info: Updated player {player.title} join date to {earliest_date}"
+                    )
 
         # Commit player updates
         db.session.commit()
