@@ -174,7 +174,7 @@ class MonthlyUploadService:
                         if thread_session:
                             try:
                                 thread_session.rollback()
-                            except:
+                            except Exception:
                                 pass
 
                         # Log the error - try different approaches for logging
@@ -185,7 +185,7 @@ class MonthlyUploadService:
                                 from flask import current_app as thread_app
 
                                 thread_app.logger.error(error_msg, exc_info=True)
-                        except:
+                        except Exception:
                             # Fallback to stderr if logging fails
                             import sys
 
@@ -196,7 +196,7 @@ class MonthlyUploadService:
                         if thread_session:
                             try:
                                 thread_session.close()
-                            except:
+                            except Exception:
                                 pass
 
                 # Use ThreadPoolExecutor to process sheets concurrently

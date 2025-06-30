@@ -49,7 +49,12 @@
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
                             <button type="submit" class="btn btn-primary">查询</button>
-                            <button type="button" class="btn btn-outline-secondary" onclick="submitAndOpenEVEWho()" id="evewhoBtn" style="display: none;">EVEWho</button>
+                            {% if selected_character %}
+                            <div>
+                                <a href="https://evewho.com/character/{{ selected_character }}" target="_blank" class="btn btn-outline-secondary me-2">EVEWho</a>
+                                <a href="https://zkillboard.com/character/{{ selected_character }}/" target="_blank" class="btn btn-outline-secondary">zKillboard</a>
+                            </div>
+                            {% endif %}
                         </div>
                     </form>
                 </div>
@@ -187,35 +192,14 @@
     // Show/hide EVEWho button based on character selection
     document.addEventListener('DOMContentLoaded', function() {
         const characterSelect = document.getElementById('character');
-        const evewhoBtn = document.getElementById('evewhoBtn');
         
-        function toggleEVEWhoButton() {
+        // Auto-submit the form when character selection changes
+        characterSelect.addEventListener('change', function() {
             if (characterSelect.value) {
-                evewhoBtn.style.display = 'block';
-            } else {
-                evewhoBtn.style.display = 'none';
+                const form = characterSelect.closest('form');
+                form.submit();
             }
-        }
-        
-        // Show button if character is already selected on page load
-        toggleEVEWhoButton();
-        
-        // Show/hide button when selection changes
-        characterSelect.addEventListener('change', toggleEVEWhoButton);
+        });
     });
-
-    function submitAndOpenEVEWho() {
-        const characterSelect = document.getElementById('character');
-        const selectedCharacterId = characterSelect.value;
-        
-        if (selectedCharacterId) {
-            // Open EVEWho in new tab
-            window.open('https://evewho.com/character/' + selectedCharacterId, '_blank');
-            
-            // Submit the form to refresh the page with selected character data
-            const form = characterSelect.closest('form');
-            form.submit();
-        }
-    }
 </script>
 {% endblock %}
