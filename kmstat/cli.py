@@ -492,10 +492,13 @@ def updatejoindate():
 
         click.echo(f"Info: Processing {len(characters)} characters...")
 
-        for character in characters:
-            click.echo(
-                f"Info: Processing character {character.name} (ID: {character.id})"
-            )
+        for i, character in enumerate(characters, 1):
+            # Show progress every 10 characters or for the last one
+            if i % 10 == 0 or i == len(characters):
+                click.echo(
+                    f"Progress: {i}/{len(characters)} characters processed", nl=False
+                )
+                click.echo("\r", nl=False)
 
             # Get the character's corporation join date
             join_date = api.get_character_corp_join_date(
@@ -503,10 +506,11 @@ def updatejoindate():
             )
 
             if join_date:
-                character.joindate = join_date
-                db.session.add(character)
-                updated_characters += 1
-                click.echo(f"Info: Updated {character.name} join date to {join_date}")
+                # Only update if the join date is different
+                if character.joindate != join_date:
+                    character.joindate = join_date
+                    db.session.add(character)
+                    updated_characters += 1
             else:
                 failed_characters += 1
                 click.echo(f"Warning: Could not get join date for {character.name}")
@@ -536,12 +540,11 @@ def updatejoindate():
             if characters_with_dates:
                 # Find the earliest join date among all characters
                 earliest_date = min(c.joindate for c in characters_with_dates)
-                player.joindate = earliest_date
-                db.session.add(player)
-                updated_players += 1
-                click.echo(
-                    f"Info: Updated player {player.title} join date to {earliest_date}"
-                )
+                # Only update if the join date is different
+                if player.joindate != earliest_date:
+                    player.joindate = earliest_date
+                    db.session.add(player)
+                    updated_players += 1
 
         # Commit player updates
         db.session.commit()
