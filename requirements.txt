@@ -46,7 +46,7 @@ markupsafe==3.0.2
     #   mako
     #   werkzeug
     #   wtforms
-numpy==2.3.1
+numpy==2.3.2
     # via pandas
 openpyxl==3.1.5
     # via -r requirements.in

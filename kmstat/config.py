@@ -21,6 +21,9 @@ class Config:
         self.sitename = self.config.get(
             "DEFAULT", "sitename", fallback="EVE Corp KM Stats"
         )
+        self.footer = self.config.get(
+            "DEFAULT", "footer", fallback="copyright 2025 aflyhorse"
+        )
 
         from kmstat.api import api
 

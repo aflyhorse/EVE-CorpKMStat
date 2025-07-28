@@ -90,6 +90,9 @@
 
     {{ bootstrap.load_js() }}
     {% block scripts %}{% endblock %}
+    <footer class="text-center mt-4 mb-2">
+        {{ config.footer|safe }}
+    </footer>
 </body>
 
 </html>
