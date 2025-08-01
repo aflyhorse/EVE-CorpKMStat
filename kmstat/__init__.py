@@ -14,6 +14,7 @@ from kmstat.utils import detect_color, get_last_day_of_month
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///../instance/database.db"
 app.config["SECRET_KEY"] = "dev"  # Change this in production
+app.config["BOOTSTRAP_SERVE_LOCAL"] = True
 
 # Initialize extensions
 bootstrap = Bootstrap5(app)
