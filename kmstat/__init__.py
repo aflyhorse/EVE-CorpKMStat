@@ -35,10 +35,13 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
-# Register Jinja2 filters
+# Register Jinja2 filters and globals
 def register_filters(app):
+    from kmstat.config import config
+
     app.jinja_env.filters["detect_color"] = detect_color
     app.jinja_env.globals["get_last_day_of_month"] = get_last_day_of_month
+    app.jinja_env.globals["config"] = config
 
 
 register_filters(app)

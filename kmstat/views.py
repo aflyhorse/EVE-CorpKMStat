@@ -91,7 +91,6 @@ def dashboard():
         selected_month=selected_month,
         year_stats=year_stats,
         month_stats=month_stats,
-        config=config,
     )
 
 
@@ -169,7 +168,6 @@ def search_player():
         end_date=end_date,
         kills=kills,
         player_characters=player_characters,
-        config=config,
     )
 
 
@@ -210,7 +208,6 @@ def search_char():
         start_date=start_date,
         end_date=end_date,
         kills=kills,
-        config=config,
     )
 
 
@@ -225,17 +222,12 @@ def character_claim():
         else []
     )
 
-    return render_template(
-        "character_claim.html.jinja2", characters=characters, config=config
-    )
+    return render_template("character_claim.html.jinja2", characters=characters)
 
 
 @app.route("/help")
 def help_page():
-    return render_template(
-        "help.html.jinja2",
-        config=config,
-    )
+    return render_template("help.html.jinja2")
 
 
 @app.route("/associate-character/<int:character_id>", methods=["GET", "POST"])
@@ -306,7 +298,6 @@ def associate_character(character_id):
         "associate_character.html.jinja2",
         character=character,
         players=players,
-        config=config,
     )
 
 
@@ -380,7 +371,6 @@ def upload_monthly_data():
             default_tax_rate=default_tax_rate,
             default_ore_convert_rate=default_ore_convert_rate,
             has_unclaimed=has_unclaimed,
-            config=config,
         )
 
     # Handle POST request
@@ -412,7 +402,8 @@ def upload_monthly_data():
         overwrite = request.form.get("overwrite") == "true"
 
         app.logger.info(
-            f"Form data parsed: year={year}, month={month}, tax_rate={tax_rate}, ore_convert_rate={ore_convert_rate}, overwrite={overwrite}"
+            f"Form data parsed: year={year}, month={month}, tax_rate={tax_rate}, "
+            + f"ore_convert_rate={ore_convert_rate}, overwrite={overwrite}"
         )
 
         if not all([year, month, tax_rate is not None, ore_convert_rate is not None]):
@@ -508,9 +499,7 @@ def view_upload_summary(year, month):
     """View summary of uploaded data."""
     upload = MonthlyUpload.query.filter_by(year=year, month=month).first_or_404()
     summary = MonthlyUploadService.get_upload_summary(upload)
-    return render_template(
-        "upload_summary.html.jinja2", upload=upload, summary=summary, config=config
-    )
+    return render_template("upload_summary.html.jinja2", upload=upload, summary=summary)
 
 
 @app.route("/download-template")
