@@ -41,7 +41,7 @@ def register_filters(app):
 
     app.jinja_env.filters["detect_color"] = detect_color
     app.jinja_env.globals["get_last_day_of_month"] = get_last_day_of_month
-    app.jinja_env.globals["config"] = config
+    app.jinja_env.globals["siteconfig"] = config
 
 
 register_filters(app)
