@@ -9,7 +9,7 @@ Player combination is based on in-game titles. The project *does not require CCP
 
 ## Example
 
-[SMAC雪月城击杀榜](https://smac.lunes.faith)
+[SMAC雪月城击杀榜](https://smac.lunes.cn)
 
 
 ## Usage
