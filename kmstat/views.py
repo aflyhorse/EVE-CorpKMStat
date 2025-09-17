@@ -495,6 +495,7 @@ def delete_monthly_data(year, month):
 
 
 @app.route("/upload/<int:year>/<int:month>/summary")
+@login_required
 def view_upload_summary(year, month):
     """View summary of uploaded data."""
     upload = MonthlyUpload.query.filter_by(year=year, month=month).first_or_404()
