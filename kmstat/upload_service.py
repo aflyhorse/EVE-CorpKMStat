@@ -360,14 +360,22 @@ class MonthlyUploadService:
                 )
 
                 # Find or create player
-                player = db.session.query(Player).filter_by(title=player_title).first()
-                if not player:
-                    current_app.logger.info(
-                        f"Creating new player during upload: {player_title}"
-                    )
-                    player = Player(title=player_title)
-                    db.session.add(player)
-                    db.session.flush()
+                # If player_title is empty or whitespace, use default player
+                if not player_title or not player_title.strip():
+                    player = db.session.query(Player).filter_by(title="__查无此人__").first()
+                    if not player:
+                        player = Player(title="__查无此人__")
+                        db.session.add(player)
+                        db.session.flush()
+                else:
+                    player = db.session.query(Player).filter_by(title=player_title).first()
+                    if not player:
+                        current_app.logger.info(
+                            f"Creating new player during upload: {player_title}"
+                        )
+                        player = Player(title=player_title)
+                        db.session.add(player)
+                        db.session.flush()
 
                 # Create character with minimal info (will be resolved later)
                 # Use a temporary negative ID to mark it as needing resolution
@@ -611,20 +619,32 @@ class MonthlyUploadService:
                             esi_title = esi_character.title.strip()
 
                             # Find player with ESI title
-                            esi_player = (
-                                db.session.query(Player)
-                                .filter_by(title=esi_title)
-                                .first()
-                            )
-
-                            if not esi_player:
-                                # Create new player with ESI title
-                                current_app.logger.info(
-                                    f"Creating new player with ESI title: {esi_title}"
+                            # If ESI title is empty or whitespace, use default player
+                            if not esi_title or not esi_title.strip():
+                                esi_player = (
+                                    db.session.query(Player)
+                                    .filter_by(title="__查无此人__")
+                                    .first()
                                 )
-                                esi_player = Player(title=esi_title)
-                                db.session.add(esi_player)
-                                db.session.flush()
+                                if not esi_player:
+                                    esi_player = Player(title="__查无此人__")
+                                    db.session.add(esi_player)
+                                    db.session.flush()
+                            else:
+                                esi_player = (
+                                    db.session.query(Player)
+                                    .filter_by(title=esi_title)
+                                    .first()
+                                )
+
+                                if not esi_player:
+                                    # Create new player with ESI title
+                                    current_app.logger.info(
+                                        f"Creating new player with ESI title: {esi_title}"
+                                    )
+                                    esi_player = Player(title=esi_title)
+                                    db.session.add(esi_player)
+                                    db.session.flush()
 
                             # Check if character should be moved to the ESI player
                             current_player = character.player
@@ -1002,12 +1022,20 @@ class MonthlyUploadService:
                 )
 
                 # Find or create player
-                player = session.query(Player).filter_by(title=player_title).first()
-                if not player:
-                    current_app.logger.info(
-                        f"Creating new player during upload: {player_title}"
-                    )
-                    player = Player(title=player_title)
+                # If player_title is empty or whitespace, use default player
+                if not player_title or not player_title.strip():
+                    player = session.query(Player).filter_by(title="__查无此人__").first()
+                    if not player:
+                        player = Player(title="__查无此人__")
+                        session.add(player)
+                        session.flush()
+                else:
+                    player = session.query(Player).filter_by(title=player_title).first()
+                    if not player:
+                        current_app.logger.info(
+                            f"Creating new player during upload: {player_title}"
+                        )
+                        player = Player(title=player_title)
                     session.add(player)
                     session.flush()
 
