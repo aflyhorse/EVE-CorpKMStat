@@ -540,11 +540,19 @@ class PAPRecord(db.Model):
     )
     character: Mapped["Character"] = db.relationship("Character")
 
+    # Store original character name from Excel upload for error recovery
+    raw_character_name: Mapped[str] = mapped_column(nullable=True)
+
     pap_points: Mapped[float] = mapped_column(nullable=False)
     strategic_pap_points: Mapped[float] = mapped_column(nullable=False)
 
     def __repr__(self):
-        return f"<PAPRecord {self.character.name if self.character else 'Unknown'}: {self.pap_points} PAP>"
+        char_name = (
+            self.character.name
+            if self.character
+            else self.raw_character_name or "Unknown"
+        )
+        return f"<PAPRecord {char_name}: {self.pap_points} PAP>"
 
 
 class BountyRecord(db.Model):
@@ -564,10 +572,18 @@ class BountyRecord(db.Model):
     )
     character: Mapped["Character"] = db.relationship("Character")
 
+    # Store original character name from Excel upload for error recovery
+    raw_character_name: Mapped[str] = mapped_column(nullable=True)
+
     tax_isk: Mapped[float] = mapped_column(nullable=False)  # Tax amount in ISK
 
     def __repr__(self):
-        return f"<BountyRecord {self.character.name if self.character else 'Unknown'}: {self.tax_isk:,.0f} ISK>"
+        char_name = (
+            self.character.name
+            if self.character
+            else self.raw_character_name or "Unknown"
+        )
+        return f"<BountyRecord {char_name}: {self.tax_isk:,.0f} ISK>"
 
 
 class MiningRecord(db.Model):
@@ -587,7 +603,15 @@ class MiningRecord(db.Model):
     )
     character: Mapped["Character"] = db.relationship("Character")
 
+    # Store original character name from Excel upload for error recovery
+    raw_character_name: Mapped[str] = mapped_column(nullable=True)
+
     volume_m3: Mapped[float] = mapped_column(nullable=False)  # Volume in cubic meters
 
     def __repr__(self):
-        return f"<MiningRecord {self.character.name if self.character else 'Unknown'}: {self.volume_m3:,.1f} m³>"
+        char_name = (
+            self.character.name
+            if self.character
+            else self.raw_character_name or "Unknown"
+        )
+        return f"<MiningRecord {char_name}: {self.volume_m3:,.1f} m³>"

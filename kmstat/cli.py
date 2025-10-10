@@ -815,3 +815,83 @@ def listdummyplayer(remove):
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error: Failed to process dummy players: {str(e)}")
+
+
+@app.cli.command()
+@click.option("--year", type=int, help="Year of the upload to fix")
+@click.option("--month", type=int, help="Month of the upload to fix (1-12)")
+@click.option("--all", "fix_all", is_flag=True, help="Fix all uploads")
+def fixupload(year, month, fix_all):
+    """
+    Fix orphaned records (with negative character_id) by retrying ESI resolution.
+
+    Can fix a specific upload by providing --year and --month, or fix all uploads with --all.
+
+    Examples:
+        flask fixupload --year 2025 --month 7
+        flask fixupload --all
+    """
+    from kmstat.models import MonthlyUpload
+    from kmstat.upload_service import MonthlyUploadService
+
+    try:
+        if fix_all:
+            click.echo("Fixing orphaned records in all uploads...")
+            stats = MonthlyUploadService.fix_orphaned_records()
+        elif year and month:
+            click.echo(f"Fixing orphaned records in {year}-{month:02d}...")
+            upload = MonthlyUpload.query.filter_by(year=year, month=month).first()
+            if not upload:
+                click.echo(f"Error: No upload found for {year}-{month:02d}")
+                return
+            stats = MonthlyUploadService.fix_orphaned_records(upload)
+        else:
+            click.echo("Error: Please specify either --year and --month, or --all")
+            click.echo("Usage: flask fixupload --year 2025 --month 7")
+            click.echo("   or: flask fixupload --all")
+            return
+
+        # Display results
+        click.echo("\n" + "=" * 60)
+        click.echo("Fix Results:")
+        click.echo("=" * 60)
+        click.echo(f"Total records checked: {stats['total_checked']}")
+        click.echo(f"Successfully fixed: {stats['fixed']}")
+        click.echo(f"Failed to fix: {stats['failed']}")
+        click.echo(f"Deleted (no name or not found): {stats['deleted']}")
+        click.echo()
+
+        if stats["total_checked"] > 0:
+            click.echo("Breakdown by record type:")
+            pap_stats = stats["by_type"]["pap"]
+            click.echo(
+                f"  PAP records: {pap_stats['fixed']} fixed, "
+                f"{pap_stats['failed']} failed, {pap_stats['deleted']} deleted"
+            )
+            bounty_stats = stats["by_type"]["bounty"]
+            click.echo(
+                f"  Bounty records: {bounty_stats['fixed']} fixed, "
+                f"{bounty_stats['failed']} failed, {bounty_stats['deleted']} deleted"
+            )
+            mining_stats = stats["by_type"]["mining"]
+            click.echo(
+                f"  Mining records: {mining_stats['fixed']} fixed, "
+                f"{mining_stats['failed']} failed, {mining_stats['deleted']} deleted"
+            )
+
+        if stats["fixed"] > 0:
+            click.echo(f"\n✓ Successfully fixed {stats['fixed']} orphaned record(s)")
+        if stats["deleted"] > 0:
+            click.echo(f"\n✓ Deleted {stats['deleted']} unfixable orphaned record(s)")
+        if stats["failed"] > 0:
+            click.echo(
+                f"\n⚠ Failed to process {stats['failed']} record(s) - check logs for details"
+            )
+        if stats["total_checked"] == 0:
+            click.echo("\n✓ No orphaned records found. Database is clean!")
+
+    except Exception as e:
+        click.echo(f"\nError: Failed to fix orphaned records: {str(e)}")
+        import traceback
+
+        traceback.print_exc()

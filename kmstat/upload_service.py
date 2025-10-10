@@ -293,6 +293,16 @@ class MonthlyUploadService:
             )
             MonthlyUploadService._resolve_new_characters(upload)
 
+            # Fix any orphaned records that failed ESI resolution
+            current_app.logger.info("Checking for and fixing any orphaned records...")
+            fix_stats = MonthlyUploadService.fix_orphaned_records(upload)
+            if fix_stats["total_checked"] > 0:
+                current_app.logger.info(
+                    f"Orphaned records: {fix_stats['total_checked']} checked, "
+                    f"{fix_stats['fixed']} fixed, {fix_stats['failed']} failed, "
+                    f"{fix_stats['deleted']} deleted"
+                )
+
             current_app.logger.info(
                 f"Successfully uploaded {year}-{month:02d}: "
                 f"{pap_count} PAP records, {bounty_count} bounty records, "
@@ -362,13 +372,17 @@ class MonthlyUploadService:
                 # Find or create player
                 # If player_title is empty or whitespace, use default player
                 if not player_title or not player_title.strip():
-                    player = db.session.query(Player).filter_by(title="__查无此人__").first()
+                    player = (
+                        db.session.query(Player).filter_by(title="__查无此人__").first()
+                    )
                     if not player:
                         player = Player(title="__查无此人__")
                         db.session.add(player)
                         db.session.flush()
                 else:
-                    player = db.session.query(Player).filter_by(title=player_title).first()
+                    player = (
+                        db.session.query(Player).filter_by(title=player_title).first()
+                    )
                     if not player:
                         current_app.logger.info(
                             f"Creating new player during upload: {player_title}"
@@ -395,6 +409,7 @@ class MonthlyUploadService:
                 character=character,
                 pap_points=pap_points,
                 strategic_pap_points=strategic_pap,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             db.session.add(pap_record)
             count += 1
@@ -457,7 +472,10 @@ class MonthlyUploadService:
                 db.session.flush()
 
             bounty_record = BountyRecord(
-                upload=upload, character=character, tax_isk=tax_isk
+                upload=upload,
+                character=character,
+                tax_isk=tax_isk,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             db.session.add(bounty_record)
             count += 1
@@ -534,7 +552,10 @@ class MonthlyUploadService:
                 db.session.flush()
 
             mining_record = MiningRecord(
-                upload=upload, character=character, volume_m3=volume_m3
+                upload=upload,
+                character=character,
+                volume_m3=volume_m3,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             db.session.add(mining_record)
             count += 1
@@ -1024,7 +1045,9 @@ class MonthlyUploadService:
                 # Find or create player
                 # If player_title is empty or whitespace, use default player
                 if not player_title or not player_title.strip():
-                    player = session.query(Player).filter_by(title="__查无此人__").first()
+                    player = (
+                        session.query(Player).filter_by(title="__查无此人__").first()
+                    )
                     if not player:
                         player = Player(title="__查无此人__")
                         session.add(player)
@@ -1057,6 +1080,7 @@ class MonthlyUploadService:
                 character=character,
                 pap_points=pap_points,
                 strategic_pap_points=strategic_pap,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             session.add(pap_record)
             count += 1
@@ -1121,7 +1145,10 @@ class MonthlyUploadService:
                 session.flush()
 
             bounty_record = BountyRecord(
-                upload=upload, character=character, tax_isk=tax_isk
+                upload=upload,
+                character=character,
+                tax_isk=tax_isk,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             session.add(bounty_record)
             count += 1
@@ -1200,7 +1227,10 @@ class MonthlyUploadService:
                 session.flush()
 
             mining_record = MiningRecord(
-                upload=upload, character=character, volume_m3=volume_m3
+                upload=upload,
+                character=character,
+                volume_m3=volume_m3,
+                raw_character_name=character_name,  # Save original name for error recovery
             )
             session.add(mining_record)
             count += 1
@@ -1226,3 +1256,199 @@ class MonthlyUploadService:
     def upload_exists(year: int, month: int) -> bool:
         """Check if upload data exists for the given year and month."""
         return MonthlyUpload.query.filter_by(year=year, month=month).first() is not None
+
+    @staticmethod
+    def fix_orphaned_records(upload: MonthlyUpload = None) -> dict:
+        """
+        Fix orphaned records (with negative character_id) by retrying ESI resolution
+        using the saved raw_character_name.
+
+        Args:
+            upload: Specific upload to fix, or None to fix all uploads
+
+        Returns:
+            dict: Statistics about fixed, failed, and deleted records
+        """
+        try:
+            from kmstat.api import api
+            from flask import current_app
+
+            current_app.logger.info("Starting orphaned records fix...")
+
+            # Get uploads to process
+            if upload:
+                uploads = [upload]
+            else:
+                uploads = MonthlyUpload.query.all()
+
+            stats = {
+                "total_checked": 0,
+                "fixed": 0,
+                "failed": 0,
+                "deleted": 0,
+                "by_type": {
+                    "pap": {"fixed": 0, "failed": 0, "deleted": 0},
+                    "bounty": {"fixed": 0, "failed": 0, "deleted": 0},
+                    "mining": {"fixed": 0, "failed": 0, "deleted": 0},
+                },
+            }
+
+            for upload_item in uploads:
+                current_app.logger.info(
+                    f"Checking upload {upload_item.year}-{upload_item.month:02d}..."
+                )
+
+                # Process PAP records
+                for record in upload_item.pap_records:
+                    if record.character_id < 0:
+                        stats["total_checked"] += 1
+                        result = MonthlyUploadService._fix_record(
+                            record, "PAP", api, current_app.logger
+                        )
+                        stats["by_type"]["pap"][result] += 1
+                        stats[result] += 1
+
+                # Process bounty records
+                for record in upload_item.bounty_records:
+                    if record.character_id < 0:
+                        stats["total_checked"] += 1
+                        result = MonthlyUploadService._fix_record(
+                            record, "Bounty", api, current_app.logger
+                        )
+                        stats["by_type"]["bounty"][result] += 1
+                        stats[result] += 1
+
+                # Process mining records
+                for record in upload_item.mining_records:
+                    if record.character_id < 0:
+                        stats["total_checked"] += 1
+                        result = MonthlyUploadService._fix_record(
+                            record, "Mining", api, current_app.logger
+                        )
+                        stats["by_type"]["mining"][result] += 1
+                        stats[result] += 1
+
+            # Commit all fixes
+            db.session.commit()
+
+            current_app.logger.info(
+                f"Orphaned records fix completed: "
+                f"{stats['fixed']} fixed, {stats['failed']} failed, {stats['deleted']} deleted"
+            )
+
+            return stats
+
+        except Exception as e:
+            current_app.logger.error(
+                f"Error fixing orphaned records: {str(e)}", exc_info=True
+            )
+            db.session.rollback()
+            raise
+
+    @staticmethod
+    def _fix_record(record, record_type: str, api, logger) -> str:
+        """
+        Fix a single orphaned record by retrying ESI resolution.
+
+        Args:
+            record: The record to fix (PAPRecord, BountyRecord, or MiningRecord)
+            record_type: Type of record for logging
+            api: API instance
+            logger: Logger instance
+
+        Returns:
+            str: 'fixed', 'failed', or 'deleted'
+        """
+        if not record.raw_character_name:
+            logger.warning(
+                f"{record_type} record {record.id} has no raw_character_name, deleting"
+            )
+            db.session.delete(record)
+            return "deleted"
+
+        character_name = record.raw_character_name.strip()
+        logger.info(f"Attempting to fix {record_type} record for '{character_name}'")
+
+        try:
+            # Try to get character ID from ESI
+            real_character_id = api.get_character_id_by_name(character_name)
+
+            if not real_character_id:
+                logger.warning(
+                    f"Character '{character_name}' still not found in ESI, deleting record"
+                )
+                db.session.delete(record)
+                return "deleted"
+
+            # Check if character exists in our database
+            character = (
+                db.session.query(Character).filter_by(id=real_character_id).first()
+            )
+
+            if not character:
+                # Create the character
+                logger.info(
+                    f"Creating character {character_name} with ID {real_character_id}"
+                )
+
+                # Get full character data from ESI
+                esi_character = api.get_character(real_character_id)
+
+                if esi_character:
+                    # Determine player
+                    if esi_character.title and esi_character.title.strip():
+                        esi_title = esi_character.title.strip()
+                    else:
+                        esi_title = "__查无此人__"
+
+                    # Find or create player
+                    player = db.session.query(Player).filter_by(title=esi_title).first()
+                    if not player:
+                        player = Player(title=esi_title)
+                        db.session.add(player)
+                        db.session.flush()
+
+                    # Create character
+                    character = Character(
+                        id=real_character_id,
+                        name=esi_character.name,
+                        title=esi_title,
+                        joindate=(
+                            esi_character.joindate
+                            if hasattr(esi_character, "joindate")
+                            else None
+                        ),
+                        player=player,
+                    )
+                    db.session.add(character)
+                    db.session.flush()
+                else:
+                    # Minimal character creation
+                    default_player = (
+                        db.session.query(Player).filter_by(title="__查无此人__").first()
+                    )
+                    if not default_player:
+                        default_player = Player(title="__查无此人__")
+                        db.session.add(default_player)
+                        db.session.flush()
+
+                    character = Character(
+                        id=real_character_id, name=character_name, player=default_player
+                    )
+                    db.session.add(character)
+                    db.session.flush()
+
+            # Update record to point to the real character
+            record.character_id = real_character_id
+            logger.info(
+                f"Fixed {record_type} record {record.id}: "
+                f"'{character_name}' -> character ID {real_character_id}"
+            )
+            return "fixed"
+
+        except Exception as e:
+            logger.error(
+                f"Failed to fix {record_type} record for '{character_name}': {str(e)}"
+            )
+            # Don't delete on error, just mark as failed
+            return "failed"
