@@ -73,17 +73,31 @@ class API:
     ESI_ENDPOINT = "https://esi.evetech.net/latest"
     ESI_IMAGE = "https://images.evetech.net"
     ZKB_ENDPOINT = "https://zkillboard.com/api"
+    VERSION = "1.0"
+    GITHUB_URL = "https://github.com/aflyhorse/EVE-CorpKMStat"
 
     def __init__(self):
         self.session = requests.Session()
+        # Set a default User-Agent, will be updated with hoster email after config is loaded
         self.session.headers.update(
             {
-                "User-Agent": "EVE-CorpKMStat/1.0 (https://github.com/aflyhorse/EVE-CorpKMStat)",
+                "User-Agent": f"EVE-CorpKMStat/{self.VERSION} (+{self.GITHUB_URL})",
             }
         )
         self._last_request_time = 0
         self._request_lock = Lock()
         self._min_interval = 1.0 / self.limits_per_sec
+
+    def set_user_agent(self, hoster_email: str):
+        """
+        Update the User-Agent header with hoster email.
+        Called by config after initialization to avoid circular import.
+        """
+        self.session.headers.update(
+            {
+                "User-Agent": f"EVE-CorpKMStat/{self.VERSION} ({hoster_email}; +{self.GITHUB_URL})",
+            }
+        )
 
     def _enforce_rate_limit(self):
         """

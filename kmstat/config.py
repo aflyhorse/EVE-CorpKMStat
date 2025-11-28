@@ -27,6 +27,9 @@ class Config:
 
         from kmstat.api import api
 
+        # Set User-Agent with hoster email (must be done after api is imported but before any API calls)
+        api.set_user_agent(self.hoster)
+
         # if instance/logo.png not exist, download it
         if not os.path.exists("kmstat/static/logo.png"):
             os.makedirs("kmstat/static", exist_ok=True)
