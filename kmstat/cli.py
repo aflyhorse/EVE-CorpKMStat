@@ -6,10 +6,9 @@ from datetime import date, datetime, timedelta
 import os
 import tarfile
 from pathlib import Path
+import zipfile
+from email.utils import parsedate_to_datetime
 import pytz
-import pandas as pd
-import bz2
-import io
 import json
 import time
 import click
@@ -356,126 +355,218 @@ def _update_old_player_join_date(old_player):
 
 
 @app.cli.command()
-def updatesde():
+@click.option(
+    "--force-parse",
+    is_flag=True,
+    help="Force parsing cached SDE zip even if it is up-to-date.",
+)
+def updatesde(force_parse: bool):
     """
     Update solar systems and item types database from CCP SDE.
     """
-    FUZZWORK_URL = "https://www.fuzzwork.co.uk/dump/latest"
+    SDE_ZIP_URL = (
+        "https://developers.eveonline.com/static-data/"
+        "eve-online-static-data-latest-jsonl.zip"
+    )
+    sde_dir = Path("instance/sde")
+    sde_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = sde_dir / "eve-online-static-data-latest-jsonl.zip"
+    meta_path = sde_dir / "eve-online-static-data-latest-jsonl.meta.json"
+
+    def _load_meta() -> dict:
+        if not meta_path.exists():
+            return {}
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _save_meta(meta: dict) -> None:
+        meta_path.write_text(
+            json.dumps(meta, ensure_ascii=False, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+
+    def _parse_last_modified_to_date(last_modified_value: str | None):
+        if not last_modified_value:
+            return None
+        try:
+            return parsedate_to_datetime(last_modified_value).date()
+        except Exception:
+            return None
+
+    def _find_member(zf: zipfile.ZipFile, filename: str) -> str:
+        # Official zip may contain files at root or inside a folder.
+        for name in zf.namelist():
+            if name.endswith(f"/{filename}") or name == filename:
+                return name
+        raise FileNotFoundError(f"{filename} not found in {zip_path}")
+
+    meta = _load_meta()
+
+    # Conditional GET: if remote not modified, server returns 304 and we keep existing zip.
+    headers: dict[str, str] = {}
+    if meta.get("etag"):
+        headers["If-None-Match"] = meta["etag"]
+    if meta.get("last_modified"):
+        headers["If-Modified-Since"] = meta["last_modified"]
+
+    need_download = True
+    if zip_path.exists() and (
+        headers.get("If-None-Match") or headers.get("If-Modified-Since")
+    ):
+        click.echo("Info: Checking official SDE zip update via ETag/Last-Modified...")
+    else:
+        click.echo("Info: No cached SDE zip metadata found; downloading...")
+
     try:
-        url = f"{FUZZWORK_URL}/mapSolarSystems.csv.bz2"
-        click.echo(f"Downloading solar systems data from {url}")
-
-        # Download the compressed file using API session
-        response = api.session.get(url)
-        response.raise_for_status()
-
-        # Decompress and load into pandas
-        decompressed_data = bz2.decompress(response.content)
-        df = pd.read_csv(io.BytesIO(decompressed_data))
-
-        # Select only the columns we need
-        systems_data = df[["solarSystemID", "solarSystemName"]].values
-
-        # Process in batches for better performance
-        batch_size = 1000
-        total_systems = len(systems_data)
-
-        click.echo(f"Info: Processing {total_systems} solar systems")
-
-        # Get existing system IDs
-        existing_ids = set(
-            system.id
-            for system in SolarSystem.query.with_entities(SolarSystem.id).all()
+        resp = api.session.get(
+            SDE_ZIP_URL, stream=True, headers=headers, allow_redirects=True
         )
-        new_systems = 0
 
-        # Add new records in batches
-        for i in range(0, total_systems, batch_size):
-            end = min(i + batch_size, total_systems)
-            batch = systems_data[i:end]
+        if resp.status_code == 304 and zip_path.exists():
+            need_download = False
+            click.echo("Info: SDE zip not modified; using cached file.")
+        else:
+            resp.raise_for_status()
+            tmp_path = zip_path.with_suffix(".zip.part")
+            if tmp_path.exists():
+                tmp_path.unlink()
+            click.echo(f"Info: Downloading official SDE zip to {zip_path}")
+            with open(tmp_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            tmp_path.replace(zip_path)
 
-            # Filter out existing systems
-            systems_to_add = [
-                SolarSystem(id=int(system[0]), name=system[1])
-                for system in batch
-                if int(system[0]) not in existing_ids
-            ]
+            meta = {
+                "url": SDE_ZIP_URL,
+                "etag": resp.headers.get("ETag"),
+                "last_modified": resp.headers.get("Last-Modified"),
+                "downloaded_at": datetime.utcnow().isoformat() + "Z",
+            }
+            _save_meta(meta)
 
-            if systems_to_add:
-                db.session.add_all(systems_to_add)
-                new_systems += len(systems_to_add)
-                click.echo(
-                    f"Info: Added {len(systems_to_add)} new systems from batch {i+1} to {end}"
-                )
+    except Exception as e:
+        # If download/check fails but we have an existing zip, fall back to it.
+        if zip_path.exists():
+            click.echo(f"Warning: Failed to refresh SDE zip ({e}); using cached file.")
+            need_download = False
+        else:
+            click.echo(f"Error: Failed to download SDE zip and no cache exists: {e}")
+            return
 
-        # Commit the changes to the database
+    remote_date = _parse_last_modified_to_date(meta.get("last_modified"))
+    if (
+        (not force_parse)
+        and (not need_download)
+        and remote_date
+        and config.sdeversion == remote_date
+    ):
+        click.echo(f"Info: SDE already up-to-date ({remote_date}); skipping parse.")
+        return
+
+    def _upsert_from_jsonl(
+        *,
+        zf: zipfile.ZipFile,
+        member_name: str,
+        model_cls,
+        label: str,
+        batch_size: int = 5000,
+    ):
+        click.echo(f"Info: Parsing {label} from {member_name}")
+
+        existing_ids = {row[0] for row in db.session.query(model_cls.id).all()}
+        new_count = 0
+        update_count = 0
+
+        new_objects = []
+        update_mappings = []
+        processed = 0
+
+        with zf.open(member_name) as fp:
+            for raw_line in fp:
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                sde_id = int(obj.get("_key"))
+                name_obj = obj.get("name") or {}
+                name_en = name_obj.get("en")
+                name_zh = name_obj.get("zh")
+
+                if not name_en:
+                    continue
+
+                if sde_id in existing_ids:
+                    update_mappings.append(
+                        {"id": sde_id, "name": name_en, "name_zh": name_zh}
+                    )
+                else:
+                    new_objects.append(
+                        model_cls(id=sde_id, name=name_en, name_zh=name_zh)
+                    )
+                    new_count += 1
+
+                processed += 1
+
+                if processed % batch_size == 0:
+                    if new_objects:
+                        db.session.bulk_save_objects(new_objects)
+                        new_objects.clear()
+                    if update_mappings:
+                        db.session.bulk_update_mappings(model_cls, update_mappings)
+                        update_count += len(update_mappings)
+                        update_mappings.clear()
+                    db.session.commit()
+                    click.echo(f"Info: {label} processed {processed}...")
+
+        if new_objects:
+            db.session.bulk_save_objects(new_objects)
+        if update_mappings:
+            db.session.bulk_update_mappings(model_cls, update_mappings)
+            update_count += len(update_mappings)
         db.session.commit()
+
         click.echo(
-            f"Info:  Solar systems database updated successfully. Added {new_systems} new systems."
+            f"Info: {label} updated. new={new_count}, updated={update_count}, total_processed={processed}"
         )
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            solar_member = _find_member(zf, "mapSolarSystems.jsonl")
+            types_member = _find_member(zf, "types.jsonl")
+
+            _upsert_from_jsonl(
+                zf=zf,
+                member_name=solar_member,
+                model_cls=SolarSystem,
+                label="solar systems",
+                batch_size=2000,
+            )
+            _upsert_from_jsonl(
+                zf=zf,
+                member_name=types_member,
+                model_cls=ItemType,
+                label="item types",
+                batch_size=5000,
+            )
 
     except Exception as e:
         db.session.rollback()
-        click.echo(f"Error: Error updating solar systems database: {e}")
+        msg = str(e)
+        click.echo(f"Error: Error parsing/updating SDE data: {e}")
+        if "no such column" in msg and "name_zh" in msg:
+            click.echo(
+                "Hint: Your database schema is missing the new 'name_zh' columns. "
+                "Run the migration SQL in doc/20260115_add_zh_names.sql (or recreate the DB) and retry."
+            )
+        return
 
-    try:
-        url = f"{FUZZWORK_URL}/invTypes.csv.bz2"
-        click.echo(f"Info: Downloading item types data from {url}")
-
-        # Download the compressed file using API session
-        response = api.session.get(url)
-        response.raise_for_status()
-
-        # Decompress and load into pandas
-        decompressed_data = bz2.decompress(response.content)
-        df = pd.read_csv(io.BytesIO(decompressed_data))
-
-        # Select only the columns we need
-        item_types_data = df[["typeID", "typeName"]].values
-
-        # Process in batches for better performance
-        batch_size = 1000
-        total_items = len(item_types_data)
-
-        click.echo(f"Info: Processing {total_items} item types")
-
-        # Get existing item type IDs
-        existing_ids = set(
-            item.id for item in ItemType.query.with_entities(ItemType.id).all()
-        )
-        new_items = 0
-
-        # Add new records in batches
-        for i in range(0, total_items, batch_size):
-            end = min(i + batch_size, total_items)
-            batch = item_types_data[i:end]
-
-            # Filter out existing items
-            items_to_add = [
-                ItemType(id=int(item[0]), name=item[1])
-                for item in batch
-                if int(item[0]) not in existing_ids
-            ]
-
-            if items_to_add:
-                db.session.add_all(items_to_add)
-                new_items += len(items_to_add)
-                click.echo(
-                    f"Info: Added {len(items_to_add)} new items from batch {i+1} to {end}"
-                )
-
-        # Commit the changes to the database
-        db.session.commit()
-        click.echo(
-            f"Info: Item types database updated successfully. Added {new_items} new items."
-        )
-
-    except Exception as e:
-        db.session.rollback()
-        click.echo(f"Error: Error updating item types database: {e}")
-
-    # Update the config to mark sde update date
-    config.set_sdeversion(date.today())
+    # Prefer server-provided Last-Modified date as SDE version marker.
+    config.set_sdeversion(remote_date or date.today())
 
 
 @app.cli.command()

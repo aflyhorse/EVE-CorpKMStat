@@ -12,5 +12,6 @@ instance/database.db
 instance/database.db-journal
 instance/logs/*.log
 instance/temp
+instance/sde
 
 kmstat/static/logo.png

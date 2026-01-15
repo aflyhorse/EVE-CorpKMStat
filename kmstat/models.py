@@ -409,11 +409,13 @@ class Character(db.Model):
 class SolarSystem(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
+    name_zh: Mapped[str] = mapped_column(nullable=True)
 
 
 class ItemType(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(nullable=False)
+    name_zh: Mapped[str] = mapped_column(nullable=True)
 
 
 class Killmail(db.Model):
