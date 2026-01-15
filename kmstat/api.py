@@ -164,11 +164,16 @@ class API:
 
             character_data = response.json()
 
+            raw_title = character_data.get("title")
+            normalized_title = raw_title.strip() if isinstance(raw_title, str) else None
+            if normalized_title == "":
+                normalized_title = None
+
             # Create character with basic info
             character = Character(
                 id=character_id,
                 name=character_data.get("name"),
-                title=character_data.get("title", "").strip(),
+                title=normalized_title,
             )
 
             # Try to get the corporation join date
