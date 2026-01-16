@@ -476,9 +476,14 @@ def updatesde(force_parse: bool):
     ):
         click.echo(f"Info: Parsing {label} from {member_name}")
 
-        existing_ids = {row[0] for row in db.session.query(model_cls.id).all()}
+        existing_rows = db.session.query(
+            model_cls.id, model_cls.name, model_cls.name_zh
+        ).all()
+        existing_map = {row[0]: (row[1], row[2]) for row in existing_rows}
+        existing_ids = set(existing_map.keys())
         new_count = 0
         update_count = 0
+        unchanged_count = 0
 
         new_objects = []
         update_mappings = []
@@ -501,9 +506,13 @@ def updatesde(force_parse: bool):
                     continue
 
                 if sde_id in existing_ids:
-                    update_mappings.append(
-                        {"id": sde_id, "name": name_en, "name_zh": name_zh}
-                    )
+                    old_name, old_name_zh = existing_map.get(sde_id, (None, None))
+                    if old_name != name_en or old_name_zh != name_zh:
+                        update_mappings.append(
+                            {"id": sde_id, "name": name_en, "name_zh": name_zh}
+                        )
+                    else:
+                        unchanged_count += 1
                 else:
                     new_objects.append(
                         model_cls(id=sde_id, name=name_en, name_zh=name_zh)
@@ -531,7 +540,8 @@ def updatesde(force_parse: bool):
         db.session.commit()
 
         click.echo(
-            f"Info: {label} updated. new={new_count}, updated={update_count}, total_processed={processed}"
+            f"Info: {label} updated. new={new_count}, updated={update_count}, "
+            f"unchanged={unchanged_count}, total_processed={processed}"
         )
 
     try:
