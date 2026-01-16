@@ -1,5 +1,6 @@
 {% extends "base.html.jinja2" %}
 {% from 'bootstrap5/utils.html' import render_icon %}
+{% from 'macros.jinja2' import localized_name %}
 
 {% block head %}
 {{ super() }}
@@ -25,6 +26,12 @@
 
         .clickable-row:hover {
             background-color: rgba(0, 0, 0, 0.04);
+        }
+
+        .localized-tooltip {
+            cursor: help;
+            display: inline-block;
+            vertical-align: text-top;
         }
     </style>
 
@@ -141,8 +148,8 @@
                                             }}</a></td>
                                     <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>{{ kill.character.name }}</td>
-                                    <td>{{ kill.solar_system.name }}</td>
-                                    <td>{{ kill.victim_ship_type.name }}</td>
+                                    <td>{{ localized_name(kill.solar_system.name, kill.solar_system.name_zh, prefer_zh) }}</td>
+                                    <td>{{ localized_name(kill.victim_ship_type.name, kill.victim_ship_type.name_zh, prefer_zh) }}</td>
                                     <td class="text-end" data-value="{{ kill.total_value }}">{{
                                         "{:,.2f}".format(kill.total_value) }}</td>
                                 </tr>
@@ -158,6 +165,13 @@
 </div>
 
 <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    });
+
     document.getElementById('player').addEventListener('input', function (e) {
         const datalist = document.getElementById('playerList');
         const hiddenInput = document.getElementById('player_id');

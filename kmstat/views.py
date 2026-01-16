@@ -5,7 +5,7 @@ from sqlalchemy import func
 from kmstat import app, db
 from kmstat.models import Player, Character, Killmail
 from kmstat.config import config
-from kmstat.utils import get_last_day_of_month
+from kmstat.utils import get_last_day_of_month, prefers_zh
 import os
 from werkzeug.utils import secure_filename
 from kmstat.upload_service import MonthlyUploadService, UploadError
@@ -96,6 +96,7 @@ def dashboard():
 
 @app.route("/search-player")
 def search_player():
+    prefer_zh = prefers_zh(request)
     # Get all players with at least one character for the dropdown
     players = (
         Player.query.join(Character, Player.id == Character.player_id)
@@ -168,11 +169,13 @@ def search_player():
         end_date=end_date,
         kills=kills,
         player_characters=player_characters,
+        prefer_zh=prefer_zh,
     )
 
 
 @app.route("/search-char")
 def search_char():
+    prefer_zh = prefers_zh(request)
     # Get all characters for the dropdown
     characters = Character.query.order_by(func.lower(Character.name)).all()
 
@@ -208,6 +211,7 @@ def search_char():
         start_date=start_date,
         end_date=end_date,
         kills=kills,
+        prefer_zh=prefer_zh,
     )
 
 

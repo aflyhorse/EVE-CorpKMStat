@@ -1,0 +1,22 @@
+{% from 'bootstrap5/utils.html' import render_icon %}
+
+{% macro localized_name(name_en, name_zh, prefer_zh) %}
+    {% set has_zh = name_zh and name_zh != name_en %}
+    {% if prefer_zh and has_zh %}
+        <span class="localized-name">
+            {{ name_zh }}
+            <span class="localized-tooltip ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ name_en }}">
+                {{ render_icon('question-circle', size='0.8em', color='primary') }}
+            </span>
+        </span>
+    {% elif (not prefer_zh) and has_zh %}
+        <span class="localized-name">
+            {{ name_en }}
+            <span class="localized-tooltip ms-1 text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="{{ name_zh }}">
+                {{ render_icon('question-circle', size='0.8em', color='primary') }}
+            </span>
+        </span>
+    {% else %}
+        {{ name_en }}
+    {% endif %}
+{% endmacro %}

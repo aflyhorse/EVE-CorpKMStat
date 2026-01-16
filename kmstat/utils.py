@@ -4,6 +4,27 @@ Utility functions for the application.
 
 import re
 import calendar
+from typing import Optional
+
+
+def prefers_zh(request) -> bool:
+    """
+    Detect if the request likely prefers Chinese based on headers/UA.
+    """
+    if request is None:
+        return False
+
+    def _lower(value: Optional[str]) -> str:
+        return value.lower() if isinstance(value, str) else ""
+
+    accept_lang = _lower(request.headers.get("Accept-Language"))
+    user_agent = _lower(request.headers.get("User-Agent"))
+    env_lang = _lower(request.environ.get("HTTP_ACCEPT_LANGUAGE"))
+
+    lang_blob = " ".join([accept_lang, env_lang, user_agent])
+
+    # Common patterns: zh, zh-cn, zh-hans, zh-hant
+    return "zh" in lang_blob
 
 
 def detect_color(text):
