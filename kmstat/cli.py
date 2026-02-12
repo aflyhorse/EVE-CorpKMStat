@@ -705,10 +705,6 @@ def updatemainchar():
                 click.echo(
                     f"Info: Updated main character for {player.title}: {old_main} -> {new_main}"
                 )
-            else:
-                click.echo(
-                    f"Info: Main character for {player.title} unchanged: {new_main}"
-                )
 
         # Commit updates
         db.session.commit()

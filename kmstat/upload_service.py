@@ -523,6 +523,10 @@ class MonthlyUploadService:
                 db.session.add(character)
                 db.session.flush()
 
+                # Ensure the player has a main character when a character is associated.
+                if player.title != "__查无此人__" and player.mainchar is None:
+                    player.mainchar = character
+
             pap_record = PAPRecord(
                 upload=upload,
                 character=character,
@@ -818,6 +822,13 @@ class MonthlyUploadService:
                                 character.player = esi_player
                                 character.title = esi_title
 
+                                # Ensure the target player has a main character.
+                                if (
+                                    esi_player.title != "__查无此人__"
+                                    and esi_player.mainchar is None
+                                ):
+                                    esi_player.mainchar = character
+
                         # Set join date from ESI
                         if esi_character.joindate:
                             character.joindate = esi_character.joindate
@@ -938,11 +949,18 @@ class MonthlyUploadService:
                     new_main = player.characters[0] if player.characters else None
 
                 if new_main and (
-                    not player.mainchar
+                    (player.mainchar is None)
+                    or (player.mainchar not in player.characters)
                     or (
                         new_main.joindate
+                        and player.mainchar
                         and player.mainchar.joindate
                         and new_main.joindate < player.mainchar.joindate
+                    )
+                    or (
+                        new_main.joindate
+                        and player.mainchar
+                        and not player.mainchar.joindate
                     )
                 ):
                     player.mainchar = new_main
@@ -1214,6 +1232,10 @@ class MonthlyUploadService:
                 )
                 session.add(character)
                 session.flush()
+
+                # Ensure the player has a main character when a character is associated.
+                if player.title != "__查无此人__" and player.mainchar is None:
+                    player.mainchar = character
 
             pap_record = PAPRecord(
                 upload=upload,
@@ -1593,6 +1615,10 @@ class MonthlyUploadService:
                     )
                     db.session.add(character)
                     db.session.flush()
+
+                    # Ensure the player has a main character.
+                    if player.title != "__查无此人__" and player.mainchar is None:
+                        player.mainchar = character
                 else:
                     # Minimal character creation
                     default_player = (

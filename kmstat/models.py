@@ -58,6 +58,10 @@ class Player(db.Model):
             self.mainchar = None
             return
 
+        # If mainchar is set but no longer belongs to this player (can happen after merges), repair it.
+        if self.mainchar is not None and self.mainchar not in self.characters:
+            self.mainchar = None
+
         # Get characters with join dates, sorted by join date
         chars_with_dates = [c for c in self.characters if c.joindate is not None]
 
