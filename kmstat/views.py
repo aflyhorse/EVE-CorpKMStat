@@ -366,6 +366,7 @@ def upload_monthly_data():
 
         # Check for unclaimed characters
         has_unclaimed = has_unclaimed_characters()
+        has_pending_fix = MonthlyUploadService.has_pending_fix()
 
         return render_template(
             "upload.html.jinja2",
@@ -375,6 +376,7 @@ def upload_monthly_data():
             default_tax_rate=default_tax_rate,
             default_ore_convert_rate=default_ore_convert_rate,
             has_unclaimed=has_unclaimed,
+            has_pending_fix=has_pending_fix,
         )
 
     # Handle POST request
@@ -438,7 +440,7 @@ def upload_monthly_data():
         try:
             app.logger.info("Starting file processing...")
             # Process the upload
-            upload = MonthlyUploadService.process_excel_upload(
+            upload, delayed_fix = MonthlyUploadService.process_excel_upload(
                 temp_path,
                 year,
                 month,
@@ -460,11 +462,16 @@ def upload_monthly_data():
             has_unclaimed = has_unclaimed_characters()
             app.logger.info(f"Unclaimed characters check completed: {has_unclaimed}")
 
+            message = f"成功上传 {year}-{month:02d} 数据。"
+            if delayed_fix:
+                message = f"{message} ESI解析排队中……请稍等5分钟。"
+
             response_data = {
                 "success": True,
-                "message": f"成功上传 {year}-{month:02d} 数据",
+                "message": message,
                 "summary": summary,
                 "has_unclaimed": has_unclaimed,
+                "delayed_fix": delayed_fix,
             }
             app.logger.info("Upload completed successfully, returning response")
             return jsonify(response_data)

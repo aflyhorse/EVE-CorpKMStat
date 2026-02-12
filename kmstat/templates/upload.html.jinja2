@@ -78,7 +78,11 @@
                 <div class="card-header">
                     <h5 class="mb-0">
                         已上传数据
-                        {% if has_unclaimed %}
+                        {% if has_pending_fix %}
+                        <span class="text-warning ms-2">
+                            {{ render_icon('exclamation-triangle-fill') }} ESI解析排队中……
+                        </span>
+                        {% elif has_unclaimed %}
                         <span class="text-danger ms-2">
                             <a href="{{ url_for('character_claim') }}" class="text-danger text-decoration-none fw-bold">
                                 {{ render_icon('exclamation-triangle-fill') }} 存在未关联角色！

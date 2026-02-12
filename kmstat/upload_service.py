@@ -4,6 +4,7 @@ Service for handling monthly Excel file uploads.
 
 import pandas as pd
 import os
+import threading
 from datetime import datetime
 from flask import current_app
 from kmstat import db
@@ -80,6 +81,64 @@ class MonthlyUploadService:
         return deleted
 
     @staticmethod
+    def _count_orphaned_records(upload: MonthlyUpload = None) -> int:
+        """Count records that still reference negative character IDs."""
+        pap_query = db.session.query(PAPRecord.id).filter(PAPRecord.character_id < 0)
+        bounty_query = db.session.query(BountyRecord.id).filter(
+            BountyRecord.character_id < 0
+        )
+        mining_query = db.session.query(MiningRecord.id).filter(
+            MiningRecord.character_id < 0
+        )
+
+        if upload:
+            pap_query = pap_query.filter_by(upload_id=upload.id)
+            bounty_query = bounty_query.filter_by(upload_id=upload.id)
+            mining_query = mining_query.filter_by(upload_id=upload.id)
+
+        pap_count = pap_query.count()
+        bounty_count = bounty_query.count()
+        mining_count = mining_query.count()
+
+        return pap_count + bounty_count + mining_count
+
+    @staticmethod
+    def schedule_fixupload(upload_id: int, delay_seconds: int = 300) -> None:
+        """Schedule a delayed fixupload run for a specific upload."""
+        if not upload_id:
+            return
+
+        app_instance = current_app._get_current_object()
+
+        def _task():
+            with app_instance.app_context():
+                try:
+                    upload = MonthlyUpload.query.get(upload_id)
+                    if not upload:
+                        current_app.logger.warning(
+                            f"Delayed fixupload skipped: upload {upload_id} not found"
+                        )
+                        return
+                    current_app.logger.info(
+                        f"Running delayed fixupload for upload {upload_id}"
+                    )
+                    MonthlyUploadService.fix_orphaned_records(upload)
+                except Exception as e:
+                    current_app.logger.error(
+                        f"Delayed fixupload failed for upload {upload_id}: {str(e)}",
+                        exc_info=True,
+                    )
+
+        timer = threading.Timer(delay_seconds, _task)
+        timer.daemon = True
+        timer.start()
+
+    @staticmethod
+    def has_pending_fix() -> bool:
+        """Check if any records still reference negative character IDs."""
+        return MonthlyUploadService._count_orphaned_records() > 0
+
+    @staticmethod
     def process_excel_upload(
         file_path: str,
         year: int,
@@ -88,7 +147,7 @@ class MonthlyUploadService:
         ore_convert_rate: float,
         uploaded_by: User,
         overwrite: bool = False,
-    ) -> MonthlyUpload:
+    ) -> tuple[MonthlyUpload, bool]:
         """
         Process an Excel file upload and store the data in the database.
 
@@ -102,7 +161,7 @@ class MonthlyUploadService:
             overwrite: Whether to overwrite existing data
 
         Returns:
-            MonthlyUpload: The created upload record
+            tuple[MonthlyUpload, bool]: The upload record and delayed fix flag
 
         Raises:
             UploadError: If there are validation or processing errors
@@ -354,13 +413,22 @@ class MonthlyUploadService:
                     f"{fix_stats['deleted']} deleted"
                 )
 
+            remaining_orphans = MonthlyUploadService._count_orphaned_records(upload)
+            delayed_fix = remaining_orphans > 0 or fix_stats["failed"] > 0
+            if delayed_fix:
+                current_app.logger.info(
+                    f"ESI resolution pending for upload {upload.id}: "
+                    f"remaining_orphans={remaining_orphans}, failed={fix_stats['failed']}"
+                )
+                MonthlyUploadService.schedule_fixupload(upload.id, delay_seconds=300)
+
             current_app.logger.info(
                 f"Successfully uploaded {year}-{month:02d}: "
                 f"{pap_count} PAP records, {bounty_count} bounty records, "
                 f"{mining_count} mining records"
             )
 
-            return upload
+            return upload, delayed_fix
 
         except Exception as e:
             current_app.logger.error(
