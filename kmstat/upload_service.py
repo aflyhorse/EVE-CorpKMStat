@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import current_app
 from kmstat import db
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from sqlalchemy import func
 from kmstat.models import (
     MonthlyUpload,
     PAPRecord,
@@ -27,6 +28,56 @@ class UploadError(Exception):
 
 class MonthlyUploadService:
     """Service for processing monthly Excel uploads."""
+
+    @staticmethod
+    def _find_character_by_name(session, character_name: str):
+        """Find a character by name case-insensitively."""
+        if not character_name:
+            return None
+        return (
+            session.query(Character)
+            .filter(func.lower(Character.name) == character_name.lower())
+            .first()
+        )
+
+    @staticmethod
+    def _cleanup_temp_character(session, character_id: int):
+        """Delete a temp character if it no longer has any records."""
+        if not character_id or character_id >= 0:
+            return
+        temp_character = session.query(Character).filter_by(id=character_id).first()
+        if not temp_character:
+            return
+
+        has_pap = (
+            session.query(PAPRecord.id).filter_by(character_id=character_id).first()
+        )
+        has_bounty = (
+            session.query(BountyRecord.id).filter_by(character_id=character_id).first()
+        )
+        has_mining = (
+            session.query(MiningRecord.id).filter_by(character_id=character_id).first()
+        )
+        if not has_pap and not has_bounty and not has_mining:
+            session.delete(temp_character)
+
+    @staticmethod
+    def _cleanup_negative_characters(session) -> int:
+        """Delete negative-id characters that have no related records."""
+        deleted = 0
+        neg_chars = session.query(Character).filter(Character.id < 0).all()
+        for ch in neg_chars:
+            has_pap = session.query(PAPRecord.id).filter_by(character_id=ch.id).first()
+            has_bounty = (
+                session.query(BountyRecord.id).filter_by(character_id=ch.id).first()
+            )
+            has_mining = (
+                session.query(MiningRecord.id).filter_by(character_id=ch.id).first()
+            )
+            if not has_pap and not has_bounty and not has_mining:
+                session.delete(ch)
+                deleted += 1
+        return deleted
 
     @staticmethod
     def process_excel_upload(
@@ -360,8 +411,8 @@ class MonthlyUploadService:
             )
 
             # Find or create character with player association (no API calls during upload)
-            character = (
-                db.session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                db.session, character_name
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
@@ -440,8 +491,8 @@ class MonthlyUploadService:
             tax_isk = float(row["纳税(isk)"])
 
             # Find or create character (no player title provided in bounty sheet, no API calls during upload)
-            character = (
-                db.session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                db.session, character_name
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
@@ -509,8 +560,8 @@ class MonthlyUploadService:
             volume_m3 = float(row["体积(m3)"])
 
             # Handle character association with player based on main character (no API calls during upload)
-            character = (
-                db.session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                db.session, character_name
             )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
@@ -591,6 +642,25 @@ class MonthlyUploadService:
             for character in new_characters:
                 try:
                     current_app.logger.info(f"Resolving character: {character.name}")
+
+                    # Prefer merging by name if a real character already exists
+                    existing_by_name = (
+                        db.session.query(Character)
+                        .filter(func.lower(Character.name) == character.name.lower())
+                        .filter(Character.id > 0)
+                        .first()
+                    )
+                    if existing_by_name:
+                        current_app.logger.info(
+                            f"Found existing character by name, merging {character.name}"
+                        )
+                        MonthlyUploadService._merge_character_records(
+                            character, existing_by_name
+                        )
+                        db.session.delete(character)
+                        db.session.flush()
+                        resolved_count += 1
+                        continue
 
                     # Get character ID from ESI by name
                     real_character_id = api.get_character_id_by_name(character.name)
@@ -1033,7 +1103,9 @@ class MonthlyUploadService:
             )
 
             # Find or create character with player association (no API calls during upload)
-            character = session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                session, character_name
+            )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
                 from flask import current_app
@@ -1113,7 +1185,9 @@ class MonthlyUploadService:
             tax_isk = float(row["纳税(isk)"])
 
             # Find or create character (no player title provided in bounty sheet, no API calls during upload)
-            character = session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                session, character_name
+            )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
                 from flask import current_app
@@ -1184,7 +1258,9 @@ class MonthlyUploadService:
             volume_m3 = float(row["体积(m3)"])
 
             # Handle character association with player based on main character (no API calls during upload)
-            character = session.query(Character).filter_by(name=character_name).first()
+            character = MonthlyUploadService._find_character_by_name(
+                session, character_name
+            )
             if not character:
                 # Character doesn't exist - create minimal character without API calls
                 from flask import current_app
@@ -1328,6 +1404,12 @@ class MonthlyUploadService:
                         stats["by_type"]["mining"][result] += 1
                         stats[result] += 1
 
+            cleaned = MonthlyUploadService._cleanup_negative_characters(db.session)
+            if cleaned:
+                current_app.logger.info(
+                    f"Cleaned up {cleaned} negative characters with no records"
+                )
+
             # Commit all fixes
             db.session.commit()
 
@@ -1359,15 +1441,36 @@ class MonthlyUploadService:
         Returns:
             str: 'fixed', 'failed', or 'deleted'
         """
-        if not record.raw_character_name:
+        character_name = None
+        if record.raw_character_name:
+            character_name = record.raw_character_name.strip()
+        elif record.character and record.character.name:
+            character_name = record.character.name.strip()
+
+        if not character_name:
             logger.warning(
-                f"{record_type} record {record.id} has no raw_character_name, deleting"
+                f"{record_type} record {record.id} has no character name, deleting"
             )
             db.session.delete(record)
             return "deleted"
 
-        character_name = record.raw_character_name.strip()
         logger.info(f"Attempting to fix {record_type} record for '{character_name}'")
+
+        existing_by_name = (
+            db.session.query(Character)
+            .filter(func.lower(Character.name) == character_name.lower())
+            .filter(Character.id > 0)
+            .first()
+        )
+        if existing_by_name:
+            old_character_id = record.character_id
+            record.character_id = existing_by_name.id
+            logger.info(
+                f"Linked {record_type} record {record.id} to existing character "
+                f"{existing_by_name.id} by name"
+            )
+            MonthlyUploadService._cleanup_temp_character(db.session, old_character_id)
+            return "fixed"
 
         try:
             # Try to get character ID from ESI
