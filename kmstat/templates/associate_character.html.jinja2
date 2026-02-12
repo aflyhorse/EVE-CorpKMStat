@@ -20,6 +20,24 @@
                 </datalist>
                 <input type="hidden" name="player_id" id="player_id" value="">
             </div>
+
+            <div class="mb-3">
+                <label class="form-label">或者</label>
+            </div>
+
+            <div class="mb-3">
+                <label for="mainCharacterSelect" class="form-label">输入主角色名</label>
+                <div class="d-flex align-items-center gap-2">
+                    <input class="form-control w-50" list="characterList" id="mainCharacterSelect"
+                           name="main_character_name" placeholder="输入主角色名" autocomplete="off">
+                    <span class="text-muted" id="mainCharacterPlayer"></span>
+                </div>
+                <datalist id="characterList">
+                    {% for c in characters %}
+                    <option value="{{ c.name }}" data-player="{{ c.player.title if c.player else '' }}">
+                    {% endfor %}
+                </datalist>
+            </div>
             
             <div class="mb-3">
                 <label class="form-label">或者</label>
@@ -69,14 +87,15 @@
             
             const playerId = document.getElementById('player_id').value;
             const newPlayerTitle = document.getElementById('newPlayerTitle').value;
+            const mainCharacterName = document.getElementById('mainCharacterSelect').value;
             
-            if (!playerId && !newPlayerTitle) {
-                alert('请选择现有玩家或输入新玩家头衔');
+            if (!playerId && !newPlayerTitle && !mainCharacterName) {
+                alert('请选择现有玩家、主角色或输入新玩家头衔');
                 return;
             }
             
-            if (playerId && newPlayerTitle) {
-                alert('请只选择一个选项：现有玩家或新玩家头衔');
+            if ((playerId && newPlayerTitle) || (playerId && mainCharacterName) || (newPlayerTitle && mainCharacterName)) {
+                alert('请只选择一个选项：现有玩家、主角色或新玩家头衔');
                 return;
             }
             
@@ -100,6 +119,23 @@
                 console.error('Error:', error);
                 alert('发生错误，请重试');
             });
+        });
+
+        document.getElementById('mainCharacterSelect').addEventListener('input', function () {
+            const datalist = document.getElementById('characterList');
+            const options = datalist.getElementsByTagName('option');
+            const playerLabel = document.getElementById('mainCharacterPlayer');
+            const inputValue = this.value.trim();
+            let foundPlayer = '';
+
+            for (let option of options) {
+                if (option.value === inputValue) {
+                    foundPlayer = option.dataset.player || '';
+                    break;
+                }
+            }
+
+            playerLabel.textContent = foundPlayer ? `玩家：${foundPlayer}` : '';
         });
     </script>
 </body>

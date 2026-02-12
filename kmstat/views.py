@@ -243,8 +243,45 @@ def associate_character(character_id):
     if request.method == "POST":
         player_id = request.form.get("player_id")
         new_player_title = request.form.get("new_player_title")
+        main_character_name = request.form.get("main_character_name")
 
         try:
+            if main_character_name:
+                main_character_name = main_character_name.strip()
+                if not main_character_name:
+                    return jsonify({"success": False, "message": "主角色名不能为空"})
+
+                main_character = Character.query.filter(
+                    func.lower(Character.name) == main_character_name.lower()
+                ).first()
+                if not main_character:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": "输入的主角色不存在",
+                        }
+                    )
+
+                if not main_character.player:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": "主角色未关联到任何玩家",
+                        }
+                    )
+
+                if character.updatePlayer(main_character.player.title):
+                    return jsonify(
+                        {
+                            "success": True,
+                            "message": (
+                                f"角色 {character.name} 已关联到玩家 {main_character.player.title}"
+                            ),
+                        }
+                    )
+                else:
+                    return jsonify({"success": False, "message": "关联失败"})
+
             if player_id:
                 # Associate with existing player
                 player = Player.query.get(player_id)
@@ -285,7 +322,10 @@ def associate_character(character_id):
                     return jsonify({"success": False, "message": "创建玩家失败"})
             else:
                 return jsonify(
-                    {"success": False, "message": "请选择现有玩家或输入新玩家头衔"}
+                    {
+                        "success": False,
+                        "message": "请选择现有玩家、主角色或输入新玩家头衔",
+                    }
                 )
 
         except Exception as e:
@@ -297,11 +337,13 @@ def associate_character(character_id):
     players = (
         Player.query.filter(Player.title != "__查无此人__").order_by(Player.title).all()
     )
+    characters = Character.query.order_by(func.lower(Character.name)).all()
 
     return render_template(
         "associate_character.html.jinja2",
         character=character,
         players=players,
+        characters=characters,
     )
 
 
