@@ -27,6 +27,7 @@ Player combination is based on in-game titles. The project *does not require CCP
 
 * Manually combine or create player is made via ```flask updateplayer --char [character name] --title [existing or new title]```.
 * Use ```flask parseall --start [startdate] --end [enddate]``` to force update on given range.
+* Use ```flask zkb [killmail_id]``` to fetch one killmail via zKillboard hash + ESI and archive it if it matches criteria.
 * Use ```flask updatejoindate``` to update join dates for all characters and players.
 
 ### User Management

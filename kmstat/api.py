@@ -82,6 +82,7 @@ class API:
         self.session.headers.update(
             {
                 "User-Agent": f"EVE-CorpKMStat/{self.VERSION} (+{self.GITHUB_URL})",
+                "Accept-Encoding": "gzip",
             }
         )
         self._last_request_time = 0
@@ -194,6 +195,27 @@ class API:
         return None
 
     @retry_with_backoff(max_retries=5, initial_delay=2)
+    def _get_zkb_killmail_entry(self, killmail_id: int) -> Optional[dict]:
+        """
+        Get the first killmail entry for a killmail ID from zKillboard API.
+        """
+        url = f"{self.ZKB_ENDPOINT}/killID/{killmail_id}/"
+        response = self._make_request("GET", url)
+        if response.status_code != 200:
+            raise requests.RequestException(
+                "Warning: Failed to get zKillboard killmail entry, "
+                + f"status code: {response.status_code}"
+            )
+
+        data = response.json()
+        if not isinstance(data, list) or not data:
+            raise ValueError(f"Invalid response format for killmail {killmail_id}")
+
+        if not isinstance(data[0], dict):
+            raise ValueError(f"Invalid killmail entry for killmail {killmail_id}")
+
+        return data[0]
+
     def get_killmail_value(self, killmail_id) -> Optional[float]:
         """
         Get the value of a killmail from zKillboard API.
@@ -201,22 +223,54 @@ class API:
             float: The total value of the killmail
             None: If the value cannot be retrieved after retries
         """
-        url = f"{self.ZKB_ENDPOINT}/killID/{killmail_id}/"
-        response = self._make_request("GET", url)
-        if response.status_code != 200:
-            raise requests.RequestException(
-                f"Warning: Failed to get killmail value, status code: {response.status_code}"
-            )
+        entry = self._get_zkb_killmail_entry(killmail_id)
+        if not entry:
+            return None
 
-        data = response.json()
-        if not isinstance(data, list) or not data:
-            raise ValueError(f"Invalid response format for killmail {killmail_id}")
-
-        value = data[0].get("zkb", {}).get("totalValue")
+        value = entry.get("zkb", {}).get("totalValue")
         if value is None:
-            raise ValueError(f"No value found for killmail {killmail_id}")
+            logging.warning(f"No value found for killmail {killmail_id}")
+            return None
 
         return float(value)  # Convert to float to ensure we don't return None
+
+    def get_killmail_hash(self, killmail_id: int) -> Optional[str]:
+        """
+        Get killmail hash from zKillboard API by killmail ID.
+        """
+        entry = self._get_zkb_killmail_entry(killmail_id)
+        if not entry:
+            return None
+
+        killmail_hash = entry.get("zkb", {}).get("hash")
+        if not isinstance(killmail_hash, str) or not killmail_hash:
+            logging.warning(f"No zkb.hash found for killmail {killmail_id}")
+            return None
+
+        return killmail_hash
+
+    @retry_with_backoff(max_retries=5, initial_delay=2)
+    def get_killmail(self, killmail_id: int, killmail_hash: str) -> Optional[dict]:
+        """
+        Get killmail body from ESI by killmail ID and hash.
+        """
+        url = (
+            f"{self.ESI_ENDPOINT}/killmails/{killmail_id}/{killmail_hash}/"
+            + "?datasource=tranquility"
+        )
+        response = self._make_request("GET", url)
+        if response.status_code != 200:
+            logging.warning(
+                f"Failed to get killmail {killmail_id} from ESI, status code: {response.status_code}"
+            )
+            return None
+
+        data = response.json()
+        if not isinstance(data, dict):
+            logging.warning(f"Invalid ESI killmail response for killmail {killmail_id}")
+            return None
+
+        return data
 
     @retry_with_backoff()
     def get_character_id_by_name(self, character_name: str) -> Optional[int]:

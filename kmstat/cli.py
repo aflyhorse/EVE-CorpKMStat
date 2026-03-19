@@ -8,7 +8,6 @@ import tarfile
 from pathlib import Path
 import zipfile
 from email.utils import parsedate_to_datetime
-import pytz
 import json
 import time
 import click
@@ -47,6 +46,96 @@ def kmurl(date: date) -> str:
     month = f"{date.month:02d}"
     day = f"{date.day:02d}"
     return f"https://data.everef.net/killmails/{year}/killmails-{year}-{month}-{day}.tar.bz2"
+
+
+def _process_single_killmail(killmail_data: dict, verbose: bool = False) -> bool:
+    """
+    Process one killmail payload and insert into database if it matches criteria.
+    Returns True only when a new killmail is inserted.
+    """
+    # Find the attacker with final_blow: true
+    final_blow_attacker = None
+    for attacker in killmail_data.get("attackers", []):
+        if attacker.get("final_blow") is True:
+            final_blow_attacker = attacker
+            break
+
+    if not final_blow_attacker:
+        if verbose:
+            click.echo("Info: Skip killmail without final_blow attacker")
+        return False
+
+    is_target = final_blow_attacker.get("corporation_id") == config.corporation_id and (
+        (
+            config.isIndependent
+            and killmail_data.get("victim", {}).get("corporation_id")
+            == config.corporation_id
+        )
+        or (
+            not config.isIndependent
+            and killmail_data.get("victim", {}).get("alliance_id") != config.alliance_id
+        )
+    )
+
+    if not is_target:
+        if verbose:
+            click.echo("Info: Killmail does not match archive criteria")
+        return False
+
+    killmail_id = killmail_data.get("killmail_id")
+    if not killmail_id:
+        click.echo("Warning: Missing killmail_id, skipping")
+        return False
+
+    killmail_time_raw = killmail_data.get("killmail_time")
+    try:
+        # ESI uses UTC timestamps; normalize to local timezone for storage.
+        utc_time = datetime.fromisoformat(killmail_time_raw.replace("Z", "+00:00"))
+        killmail_time = utc_time.astimezone(config.localtz)
+    except Exception:
+        click.echo(f"Warning: Invalid killmail_time for killmail {killmail_id}")
+        return False
+
+    character_id = final_blow_attacker.get("character_id")
+    solar_system_id = killmail_data.get("solar_system_id")
+    victim_ship_type_id = killmail_data.get("victim", {}).get("ship_type_id")
+
+    existing_killmail = Killmail.query.filter_by(id=killmail_id).first()
+    if existing_killmail:
+        if verbose:
+            click.echo(f"Info: Killmail {killmail_id} already exists")
+        return False
+
+    character = Character.query.filter_by(id=character_id).first()
+
+    if not character and character_id:
+        character = api.get_character(character_id)
+        if character:
+            if character.title is None:
+                character.player = Player.query.first()
+            elif not character.updatePlayer():
+                click.echo(
+                    f"Warning: Could not associate character {character.name} with a player"
+                )
+            db.session.add(character)
+
+    if not character:
+        click.echo(f"Warning: Character {character_id} not found in ESI")
+        click.echo(f"Warning: Skipping killmail {killmail_id}")
+        return False
+
+    new_killmail = Killmail(
+        id=killmail_id,
+        killmail_time=killmail_time,
+        character_id=character_id,
+        solar_system_id=solar_system_id,
+        victim_ship_type_id=victim_ship_type_id,
+        total_value=api.get_killmail_value(killmail_id),
+    )
+    db.session.add(new_killmail)
+    db.session.commit()
+    click.echo(f"Info: Inserted killmail {killmail_id}")
+    return True
 
 
 def download_with_retry(url: str, file_path: Path, max_retries: int = 3) -> bool:
@@ -128,88 +217,8 @@ def parse(date):
             with open(json_file, "r") as f:
                 killmail_data = json.load(f)
 
-                # Find the attacker with final_blow: true
-                final_blow_attacker = None
-                for attacker in killmail_data.get("attackers", []):
-                    if attacker.get("final_blow") is True:
-                        final_blow_attacker = attacker
-                        break
-
-                # If we found the final blow attacker and they meet our criteria
-                if (
-                    final_blow_attacker
-                    and final_blow_attacker.get("corporation_id")
-                    == config.corporation_id
-                    and (
-                        (
-                            config.isIndependent
-                            and killmail_data.get("victim", {}).get("corporation_id")
-                            == config.corporation_id
-                        )
-                        or (
-                            not config.isIndependent
-                            and killmail_data.get("victim", {}).get("alliance_id")
-                            != config.alliance_id
-                        )
-                    )
-                ):
-
-                    # Extract the data we need
-                    killmail_id = killmail_data.get("killmail_id")
-
-                    # Convert UTC time to Asia/Shanghai timezone
-                    utc_time = datetime.strptime(
-                        killmail_data.get("killmail_time"), "%Y-%m-%dT%H:%M:%SZ"
-                    )
-                    utc_time = utc_time.replace(tzinfo=pytz.UTC)
-                    killmail_time = utc_time.astimezone(config.localtz)
-
-                    character_id = final_blow_attacker.get("character_id")
-                    solar_system_id = killmail_data.get("solar_system_id")
-                    victim_ship_type_id = killmail_data.get("victim", {}).get(
-                        "ship_type_id"
-                    )
-
-                    # Check if this killmail already exists
-                    existing_killmail = Killmail.query.filter_by(id=killmail_id).first()
-
-                    if not existing_killmail:
-                        # Get or create character using API
-                        character = Character.query.filter_by(id=character_id).first()
-
-                        # If character doesn't exist, try to get it from ESI
-                        if not character and character_id:
-                            character = api.get_character(character_id)
-                            if character:
-                                # Try to update player based on character title
-                                if character.title is None:
-                                    # Fallback to default player
-                                    character.player = Player.query.first()
-                                elif not character.updatePlayer():
-                                    msg = f"Warning: Could not associate character {character.name}"
-                                    msg += " with a player"
-                                    click.echo(msg)
-                                db.session.add(character)
-
-                        # If we have a valid character (either existing or new), create the killmail
-                        if character:
-                            new_killmail = Killmail(
-                                id=killmail_id,
-                                killmail_time=killmail_time,
-                                character_id=character_id,
-                                solar_system_id=solar_system_id,
-                                victim_ship_type_id=victim_ship_type_id,
-                                total_value=api.get_killmail_value(killmail_id),
-                            )
-                            db.session.add(new_killmail)
-                            db.session.commit()
-                            inserted_count += 1
-                            click.echo(f"Info: Inserted killmail {killmail_id}")
-                        else:
-                            click.echo(
-                                f"Warning: Character {character_id} not found in ESI"
-                            )
-                            click.echo(f"Warning: Skipping killmail {killmail_id}")
+                if _process_single_killmail(killmail_data):
+                    inserted_count += 1
 
             # Remove the processed file
             os.remove(json_file)
@@ -227,6 +236,39 @@ def parse(date):
     except Exception as e:
         db.session.rollback()
         click.echo(f"Error: {e}")
+
+
+@app.cli.command()
+@click.argument("killmail_id", type=int)
+def zkb(killmail_id: int):
+    """
+    Fetch one killmail by zKillboard killmail ID and archive it if matched.
+    """
+    if killmail_id <= 0:
+        click.echo("Error: killmail_id must be a positive integer")
+        return
+
+    try:
+        click.echo(f"Info: Fetching zkb hash for killmail {killmail_id}")
+        killmail_hash = api.get_killmail_hash(killmail_id)
+        if not killmail_hash:
+            click.echo(f"Error: Cannot get zkb hash for killmail {killmail_id}")
+            return
+
+        click.echo(f"Info: Fetching killmail body from ESI for {killmail_id}")
+        killmail_data = api.get_killmail(killmail_id, killmail_hash)
+        if not killmail_data:
+            click.echo(f"Error: Cannot get ESI killmail for {killmail_id}")
+            return
+
+        if _process_single_killmail(killmail_data, verbose=True):
+            click.echo(f"Info: Killmail {killmail_id} archived")
+        else:
+            click.echo(f"Info: Killmail {killmail_id} not archived")
+
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f"Error: Failed to process killmail {killmail_id}: {e}")
 
 
 @app.cli.command()
