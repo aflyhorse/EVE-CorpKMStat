@@ -72,7 +72,6 @@ class API:
     limits_per_sec = 10
     ESI_ENDPOINT = "https://esi.evetech.net"
     ESI_VERSION = "2025-12-16"
-    ESI_VERSION_STRING = f"X-Compatibility-Date={ESI_VERSION}"
     ESI_IMAGE = "https://images.evetech.net"
     ZKB_ENDPOINT = "https://zkillboard.com/api"
     VERSION = "1.0"
@@ -85,6 +84,7 @@ class API:
             {
                 "User-Agent": f"EVE-CorpKMStat/{self.VERSION} (+{self.GITHUB_URL})",
                 "Accept-Encoding": "gzip",
+                "X-Compatibility-Date": self.ESI_VERSION,
             }
         )
         self._last_request_time = 0
@@ -131,7 +131,7 @@ class API:
         """
         Get the alliance ID for a given corporation ID from EVE Online ESI.
         """
-        url = f"{self.ESI_ENDPOINT}/corporations/{corporation_id}/?{self.ESI_VERSION_STRING}"
+        url = f"{self.ESI_ENDPOINT}/corporations/{corporation_id}"
         response = self._make_request("GET", url)
         if response.status_code == 200:
             return response.json().get("alliance_id", 0)
@@ -157,9 +157,7 @@ class API:
         Get character information from EVE Online ESI.
         Also fetches the corporation join date automatically.
         """
-        url = (
-            f"{self.ESI_ENDPOINT}/characters/{character_id}/?{self.ESI_VERSION_STRING}"
-        )
+        url = f"{self.ESI_ENDPOINT}/characters/{character_id}"
         response = self._make_request("GET", url)
         if response.status_code == 200:
             from kmstat.models import Character
@@ -256,7 +254,7 @@ class API:
         """
         Get killmail body from ESI by killmail ID and hash.
         """
-        url = f"{self.ESI_ENDPOINT}/killmails/{killmail_id}/{killmail_hash}/?{self.ESI_VERSION_STRING}"
+        url = f"{self.ESI_ENDPOINT}/killmails/{killmail_id}/{killmail_hash}"
         response = self._make_request("GET", url)
         if response.status_code != 200:
             logging.warning(
@@ -282,7 +280,7 @@ class API:
         Returns:
             Optional[int]: The character ID if found and verified as a character, None otherwise
         """
-        url = f"{self.ESI_ENDPOINT}/universe/ids/?{self.ESI_VERSION_STRING}"
+        url = f"{self.ESI_ENDPOINT}/universe/ids"
 
         # The API expects a simple list of names to search for
         payload = [character_name]
@@ -327,7 +325,7 @@ class API:
             Optional[datetime]: The datetime when the character first joined the corporation in local timezone,
                               None if not found
         """
-        url = f"{self.ESI_ENDPOINT}/characters/{character_id}/corporationhistory/?{self.ESI_VERSION_STRING}"
+        url = f"{self.ESI_ENDPOINT}/characters/{character_id}/corporationhistory"
 
         response = self._make_request("GET", url)
         if response.status_code != 200:
