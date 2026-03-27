@@ -3,13 +3,19 @@ from flask import render_template, request, jsonify, send_file
 from flask_login import login_required, current_user
 from sqlalchemy import func
 from kmstat import app, db
-from kmstat.models import Player, Character, Killmail
+from kmstat.models import (
+    Player,
+    Character,
+    Killmail,
+    MonthlyUpload,
+    PAPRecord,
+    BountyRecord,
+)
 from kmstat.config import config
 from kmstat.utils import get_last_day_of_month, prefers_zh
 import os
 from werkzeug.utils import secure_filename
 from kmstat.upload_service import MonthlyUploadService, UploadError
-from kmstat.models import MonthlyUpload
 
 
 def has_unclaimed_characters():
@@ -133,6 +139,7 @@ def search_player():
     player_characters = []
     selected_player_name = None
     selected_player_obj = None
+    monthly_stats = []
 
     if player_id:
         selected_player_obj = Player.query.get(player_id)
@@ -159,6 +166,62 @@ def search_player():
 
             kills = query.order_by(Killmail.id.desc()).all()
 
+            # Calculate monthly statistics for admin users from upload data
+            if current_user.is_authenticated:
+                from kmstat.upload_service import MonthlyUploadService
+
+                # Get all character IDs for this player
+                char_ids = [c.id for c in player_characters]
+
+                # Find all uploads that contain records for this player's characters
+                uploads = (
+                    db.session.query(MonthlyUpload)
+                    .filter(
+                        db.or_(
+                            MonthlyUpload.pap_records.any(
+                                PAPRecord.character_id.in_(char_ids)
+                            ),
+                            MonthlyUpload.bounty_records.any(
+                                BountyRecord.character_id.in_(char_ids)
+                            ),
+                        )
+                    )
+                    .order_by(MonthlyUpload.year, MonthlyUpload.month)
+                    .all()
+                )
+
+                # Process each upload to get player-specific data
+                monthly_stats = []
+                for upload in uploads:
+                    # Get the full summary for this month
+                    summary = MonthlyUploadService.get_upload_summary(upload)
+
+                    # Extract data for this specific player
+                    player_summary = next(
+                        (
+                            p
+                            for p in summary.get("player_summary", [])
+                            if p.get("player_id") == selected_player_obj.id
+                        ),
+                        None,
+                    )
+
+                    if player_summary:
+                        year_month = f"{upload.year:04d}-{upload.month:02d}"
+                        monthly_stats.append(
+                            type(
+                                "MonthlyStat",
+                                (),
+                                {
+                                    "year_month": year_month,
+                                    "total_income": int(
+                                        player_summary.get("total_income", 0)
+                                    ),
+                                    "pap_count": player_summary.get("total_pap", 0.0),
+                                },
+                            )()
+                        )
+
     return render_template(
         "search_player.html.jinja2",
         players=players,
@@ -170,6 +233,7 @@ def search_player():
         kills=kills,
         player_characters=player_characters,
         prefer_zh=prefer_zh,
+        monthly_stats=monthly_stats,
     )
 
 

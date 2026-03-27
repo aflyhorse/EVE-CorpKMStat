@@ -70,6 +70,37 @@
                     </form>
                 </div>
             </div>
+
+            <!-- Monthly Statistics for admin users - directly below search form -->
+            {% if selected_player and current_user.is_authenticated and monthly_stats %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5 class="mb-0">按月统计</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>月份</th>
+                                    <th class="text-end">总收入</th>
+                                    <th class="text-end">PAP数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in monthly_stats %}
+                                <tr>
+                                    <td>{{ stat.year_month }}</td>
+                                    <td class="text-end">{{ "{:,.0f}".format(stat.total_income) }}</td>
+                                    <td class="text-end">{{ "{:.1f}".format(stat.pap_count) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         {% if selected_player %}

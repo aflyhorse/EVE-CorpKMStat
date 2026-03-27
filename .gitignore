@@ -11,7 +11,9 @@ instance/config.ini
 instance/database.db
 instance/database.db-journal
 instance/logs/*.log
-instance/temp
-instance/sde
+instance/temp/*
+instance/sde/*
+
+!*.gitkeep
 
 kmstat/static/logo.png
