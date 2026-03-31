@@ -2,10 +2,17 @@
 """Backfill ship icon cache for all victim ship types referenced by killmails."""
 
 import os
+import sys
+from pathlib import Path
 
-from kmstat import app
-from kmstat.models import Killmail
-from kmstat.icon_cache import ensure_ship_icons_cached
+# Allow running this script directly via: python3 migrate/....py
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from kmstat import app  # noqa: E402
+from kmstat.models import Killmail  # noqa: E402
+from kmstat.icon_cache import ensure_ship_icons_cached  # noqa: E402
 
 
 def _read_existing_icon_ids(icons_dir: str) -> set[int]:
