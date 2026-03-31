@@ -55,6 +55,7 @@ Many thanks for:
 
 * [EVERef](https://everef.net) for packaged killmails.
 * [zKillboard](https://zkillboard.com/) for price estimation of killmail.
+* [New Eden Encyclopedia](https://newedenencyclopedia.net/thirdpartydev.html) for ship icons. (So why the [icons from CCP](https://developers.eveonline.com/docs/services/image-server/) has had wrong corner tags for years?)
 
 ## License
 

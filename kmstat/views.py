@@ -13,9 +13,41 @@ from kmstat.models import (
 )
 from kmstat.config import config
 from kmstat.utils import get_last_day_of_month, prefers_zh
+from kmstat.api import api
 import os
 from werkzeug.utils import secure_filename
 from kmstat.upload_service import MonthlyUploadService, UploadError
+
+
+def ensure_ship_icons_cached(item_type_ids: list[int]) -> set[int]:
+    """Ensure ship icons exist under static/icons and return available item IDs."""
+    if not item_type_ids:
+        return set()
+
+    icons_dir = os.path.join(app.root_path, "static", "icons")
+    os.makedirs(icons_dir, exist_ok=True)
+
+    available_ids: set[int] = set()
+    for item_id in set(item_type_ids):
+        if not item_id:
+            continue
+
+        icon_path = os.path.join(icons_dir, f"{item_id}.png")
+        if os.path.exists(icon_path):
+            available_ids.add(item_id)
+            continue
+
+        icon_url = f"https://newedenencyclopedia.net/rsc/type_icons/{item_id}.png"
+        try:
+            response = api.session.get(icon_url, timeout=10)
+            if response.status_code == 200 and response.content:
+                with open(icon_path, "wb") as f:
+                    f.write(response.content)
+                available_ids.add(item_id)
+        except Exception:
+            continue
+
+    return available_ids
 
 
 def has_unclaimed_characters():
@@ -137,6 +169,7 @@ def search_player():
 
     kills = []
     player_characters = []
+    available_icons = set()
     selected_player_name = None
     selected_player_obj = None
     monthly_stats = []
@@ -165,6 +198,10 @@ def search_player():
                 query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
 
             kills = query.order_by(Killmail.id.desc()).all()
+            item_type_ids = [
+                kill.victim_ship_type_id for kill in kills if kill.victim_ship_type_id
+            ]
+            available_icons = ensure_ship_icons_cached(item_type_ids)
 
             # Calculate monthly statistics for admin users from upload data
             if current_user.is_authenticated:
@@ -234,6 +271,7 @@ def search_player():
         player_characters=player_characters,
         prefer_zh=prefer_zh,
         monthly_stats=monthly_stats,
+        available_icons=available_icons,
     )
 
 
@@ -249,6 +287,7 @@ def search_char():
     end_date = request.args.get("end_date")
 
     kills = []
+    available_icons = set()
     selected_character = None
     if character_id:
         # Get character with killmails loaded
@@ -266,6 +305,10 @@ def search_char():
                 query = query.filter(Killmail.killmail_time <= f"{end_date} 23:59:59")
 
             kills = query.order_by(Killmail.id.desc()).all()
+            item_type_ids = [
+                kill.victim_ship_type_id for kill in kills if kill.victim_ship_type_id
+            ]
+            available_icons = ensure_ship_icons_cached(item_type_ids)
 
     return render_template(
         "search_char.html.jinja2",
@@ -276,6 +319,7 @@ def search_char():
         end_date=end_date,
         kills=kills,
         prefer_zh=prefer_zh,
+        available_icons=available_icons,
     )
 
 

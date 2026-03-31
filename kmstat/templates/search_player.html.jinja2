@@ -33,6 +33,16 @@
             display: inline-block;
             vertical-align: text-top;
         }
+
+        .ship-icon-inline {
+            width: 1em;
+            height: 1em;
+            object-fit: contain;
+            vertical-align: -0.12em;
+            transform: scale(2);
+            transform-origin: center;
+            margin-right: 0.8em;
+        }
     </style>
 
     <div class="row mt-4">
@@ -180,7 +190,16 @@
                                     <td>{{ kill.killmail_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>{{ kill.character.name }}</td>
                                     <td>{{ localized_name(kill.solar_system.name, kill.solar_system.name_zh, prefer_zh) }}</td>
-                                    <td>{{ localized_name(kill.victim_ship_type.name, kill.victim_ship_type.name_zh, prefer_zh) }}</td>
+                                    <td>
+                                        {% if kill.victim_ship_type_id in available_icons %}
+                                        <img
+                                            src="{{ url_for('static', filename='icons/' ~ kill.victim_ship_type_id ~ '.png') }}"
+                                            alt="ship icon"
+                                            class="ship-icon-inline"
+                                            loading="lazy">
+                                        {% endif %}
+                                        {{ localized_name(kill.victim_ship_type.name, kill.victim_ship_type.name_zh, prefer_zh) }}
+                                    </td>
                                     <td class="text-end" data-value="{{ kill.total_value }}">{{
                                         "{:,.2f}".format(kill.total_value) }}</td>
                                 </tr>
