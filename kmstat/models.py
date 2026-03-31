@@ -4,6 +4,7 @@ Database models for the application.
 
 from kmstat import db
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import event
 from sqlalchemy.types import DateTime
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -438,6 +439,17 @@ class Killmail(db.Model):
     )
     victim_ship_type: Mapped["ItemType"] = db.relationship("ItemType")
     total_value: Mapped[float] = mapped_column(nullable=False)
+
+
+@event.listens_for(Killmail, "after_insert")
+def warm_ship_icon_after_killmail_insert(mapper, connection, target):
+    """Pre-warm ship icon cache when a killmail is inserted."""
+    if not target.victim_ship_type_id:
+        return
+
+    from kmstat.icon_cache import ensure_ship_icons_cached
+
+    ensure_ship_icons_cached([target.victim_ship_type_id])
 
 
 class SystemState(db.Model):
